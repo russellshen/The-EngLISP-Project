@@ -146,9 +146,15 @@ pip install git+https://github.com/russellshen/The-EngLISP-Project.git
    cd The-EngLISP-Project
    ```
 2. Install the package in editable mode along with development dependencies:
-   ```bash
-   pip install -e .[dev]
-   ```
+    ```bash
+    pip install -e .[dev]
+    ```
+
+### Lexical Databases & Fallback Samples
+
+*   **Public Fallback Samples**: This repository comes bundled with lightweight fallback sample datasets (`sample_*.lson` files under `englisp/resources/`). These allow the entire parsing, generation, compilation, and interpretation pipeline to compile, run tests, and execute out of the box for testing and sample inputs.
+*   **Full Production Database**: The full-scale multilingual database (containing 254 partition files mapping over 100,000 nouns, verbs, adjectives, grammatical genders, and translations linked to BabelNet and WordNet synsets) is kept in a separate private repository to protect the project's data IP and commercial viability.
+*   **Requesting Access**: If you are an academic researcher, open-source contributor, or commercial partner interested in utilizing the full-scale dictionaries or licensing the dataset, please reach out directly via the **Commercial Licensing & Contact** section below.
 
 ---
 
