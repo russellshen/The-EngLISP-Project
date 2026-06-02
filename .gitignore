@@ -1,0 +1,32 @@
+# Python caching
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Testing Cache
+.pytest_cache/
+
+# Virtual Environments
+venv/
+.venv/
+env/
+.env/
+
+# Editor & OS Metadata
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# EngLISP large-scale dictionary databases (kept private/SaaS-only)
+englisp/resources/en_lexicon_*.lson
+englisp/resources/fr_lexicon_*.lson
+englisp/resources/english_to_french_vocab_*.lson
+englisp/resources/french_to_english_vocab_*.lson
+englisp/resources/english_verb_forms_*.lson
+englisp/resources/french_verb_forms_*.lson
+englisp/resources/french_gender_*.lson
+englisp/resources/synsets_*.lson
+englisp/resources/word_to_synsets_*.lson
+

@@ -1,0 +1,11 @@
+(
+  (break (cause (become broken)))
+  (create (cause (become exist)))
+  (decrease (cause (become smaller)))
+  (give (cause (have)))
+  (increase (cause (become greater)))
+  (kill (cause (become (not alive))))
+  (minimize (cause (become smaller)))
+  (stop (cause (become (not moving))))
+  (transform (cause (become different)))
+)

@@ -1,0 +1,40 @@
+# Copyright (c) 2026 Russell Shen. All rights reserved.
+#
+# This source code is licensed under the Creative Commons Attribution-NonCommercial-NoDerivatives 
+# 4.0 International (CC BY-NC-ND 4.0) license. 
+#
+# Commercial use, proprietary use, or use in closed-source or revenue-generating projects 
+# is strictly prohibited under this license.
+#
+# For commercial licensing inquiries, please contact:
+# Russell Shen (russellshen7@gmail.com)
+#
+# Licensing terms, scope, and compensation are subject to separate negotiation.
+
+[build-system]
+requires = ["setuptools>=61.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "englisp"
+version = "1.0.0"
+description = "A Bidirectional Bridge Between Natural Language and Computation"
+readme = "README.md"
+authors = [
+    { name = "Russell Shen", email = "russellshen7@gmail.com" }
+]
+requires-python = ">=3.13"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: Other/Proprietary License",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "fastapi>=0.110.0",
+    "uvicorn>=0.28.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+]

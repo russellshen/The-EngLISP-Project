@@ -1,0 +1,266 @@
+<!--
+  Copyright (c) 2026 Russell Shen. All rights reserved.
+
+  This work is licensed under the Creative Commons Attribution-NonCommercial-NoDerivatives 
+  4.0 International (CC BY-NC-ND 4.0) license.
+
+  Commercial use, proprietary use, or use in closed-source or revenue-generating projects 
+  is strictly prohibited under this license.
+
+  For commercial licensing inquiries, please contact:
+  Russell Shen (russellshen7@gmail.com)
+
+  Licensing terms, scope, and compensation are subject to separate negotiation.
+-->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EngLISP — Bidirectional Natural Language & Computation Bridge</title>
+    <meta name="description" content="An interactive playground and visualization dashboard for EngLISP: transforming English sentences into canonical Lisp S-expressions and MinimaLIST representations bidirectionally.">
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@300;400;500;600;700;800&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div id="toast-container" class="toast-container"></div>
+    <div class="background-glow"></div>
+    <div class="app-container">
+        
+        <!-- Header -->
+        <header class="main-header">
+            <div class="logo-area">
+                <span class="logo-eng">Eng</span><span class="logo-lisp">LISP</span>
+            </div>
+            <p class="tagline">A Bidirectional Bridge Between Natural Language and Computation</p>
+        </header>
+
+        <!-- Sandbox Quick Links -->
+        <section class="samples-section">
+            <h2 class="section-title">Try Example Sentences</h2>
+            <div class="samples-grid">
+                <button class="sample-btn" id="sample-btn-1" data-sentence="The dog chased the cat.">
+                    "The dog chased the cat."
+                </button>
+                <button class="sample-btn" id="sample-btn-2" data-sentence="The quick brown fox jumped over the lazy dog.">
+                    "The quick brown fox jumped..."
+                </button>
+                <button class="sample-btn" id="sample-btn-3" data-sentence="A student read a book in the library.">
+                    "A student read a book..."
+                </button>
+                <button class="sample-btn" id="sample-btn-4" data-sentence="The dog had been chasing the cat.">
+                    "The dog had been chasing..."
+                </button>
+                <button class="sample-btn" id="sample-btn-5" data-sentence="The dog barked and the dog ran.">
+                    "The dog barked and..."
+                </button>
+                <button class="sample-btn" id="sample-btn-6" data-sentence="Le chien a chassé le chat.">
+                    "Le chien a chassé..."
+                </button>
+                <button class="sample-btn" id="sample-btn-7" data-sentence="Le renard paresseux a sauté sur le chien intelligent.">
+                    "Le renard paresseux a sauté..."
+                </button>
+                <button class="sample-btn" id="sample-btn-8" data-sentence="Le chien avait été en train de chasser le chat.">
+                    "Le chien avait été en..."
+                </button>
+                <button class="sample-btn" id="sample-btn-9" data-sentence="Le chien aboyait et le chien courait.">
+                    "Le chien aboyait et..."
+                </button>
+            </div>
+        </section>
+
+        <!-- Pipeline Dashboard Grid -->
+        <main class="pipeline-grid">
+
+            <!-- STAGE 1: Natural Language -->
+            <section class="card stage-card" id="card-stage-1">
+                <div class="card-header">
+                    <div class="stage-badge">Stage 1</div>
+                    <h3 class="card-title">Natural Language</h3>
+                </div>
+                <div class="card-body">
+                    <p class="card-desc">Ambiguous, redundant, and stylistically diverse language. The starting point and generation target.</p>
+                    <div class="lang-selector-row">
+                        <span class="lang-label">Language Mode:</span>
+                        <select id="select-lang" class="lang-select">
+                            <option value="auto" selected>Auto-detect</option>
+                            <option value="en">English</option>
+                            <option value="fr">French</option>
+                        </select>
+                    </div>
+                    <textarea 
+                        id="input-nl-text" 
+                        class="text-input" 
+                        placeholder="Type an English sentence here..."
+                    >The quick brown fox jumped over the lazy dog.</textarea>
+                    <button id="btn-parse-nl" class="action-btn primary-btn">
+                        <span>Parse to X-bar (Forward)</span>
+                        <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                    </button>
+                </div>
+            </section>
+
+            <!-- STAGE 2: X-bar Syntax Tree -->
+            <section class="card stage-card double-width" id="card-stage-2">
+                <div class="card-header">
+                    <div class="stage-badge">Stage 2</div>
+                    <h3 class="card-title">X-bar Tree (Linguistic IR)</h3>
+                </div>
+                <div class="card-body xbar-body">
+                    <p class="card-desc">Hierarchical structure representing head-complement-specifier syntax relationships.</p>
+                    <div class="xbar-tabs">
+                        <button class="tab-btn active" id="tab-visual">Visual Tree</button>
+                        <button class="tab-btn" id="tab-text">Text AST</button>
+                    </div>
+                    <div class="tab-content">
+                        <!-- SVG Tree Visualizer -->
+                        <div id="xbar-visual-container" class="visual-container">
+                            <svg id="xbar-svg" width="100%" height="450"></svg>
+                        </div>
+                        <!-- Text Area for formatted AST -->
+                        <pre id="xbar-tree-text" class="code-output hidden">Waiting for parse...</pre>
+                    </div>
+                </div>
+            </section>
+
+            <!-- STAGE 3: EngLISP (Computational IR) -->
+            <section class="card stage-card" id="card-stage-3">
+                <div class="card-header">
+                    <div class="stage-badge">Stage 3</div>
+                    <h3 class="card-title">EngLISP S-Expression</h3>
+                </div>
+                <div class="card-body">
+                    <p class="card-desc">Rotated Lisp S-expression putting semantic heads/verbs first inside functional parenthesis.</p>
+                    <textarea 
+                        id="input-englisp-text" 
+                        class="code-input text-input" 
+                        placeholder="Waiting for input..."
+                    ></textarea>
+                    <div class="button-row">
+                        <button id="btn-gen-englisp" class="action-btn secondary-btn">
+                            <svg class="btn-icon rev-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+                            <span>Generate NL (Reverse)</span>
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- STAGE 4: MinimaLIST EngLISP -->
+            <section class="card stage-card" id="card-stage-4">
+                <div class="card-header">
+                    <div class="stage-badge">Stage 4</div>
+                    <h3 class="card-title">MinimaLIST (Minimal Form)</h3>
+                </div>
+                <div class="card-body">
+                    <p class="card-desc">Shortest feasible representation. Redundancy (determiners, logical negatives) compressed.</p>
+                    <textarea 
+                        id="input-minimalist-text" 
+                        class="code-input text-input" 
+                        placeholder="Waiting for input..."
+                    ></textarea>
+                    <div class="button-row">
+                        <button id="btn-gen-minimalist" class="action-btn accent-btn">
+                            <svg class="btn-icon rev-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+                            <span>Expand & Generate (Reverse)</span>
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+        </main>
+
+        <!-- S-Expression Interpreter Console & World State -->
+        <section class="world-section">
+            <h2 class="section-title">EngLISP S-Expression Interpreter</h2>
+            <div class="world-grid">
+                <!-- World State Database -->
+                <div class="card world-card">
+                    <div class="card-header">
+                        <div class="stage-badge">Database</div>
+                        <h3 class="card-title">World State Knowledge Base</h3>
+                    </div>
+                    <div class="card-body">
+                        <p class="card-desc">Stateful registry of active facts. You can assert facts by parsing sentences or running assertions.</p>
+                        <div class="world-state-container">
+                            <ul id="world-facts-list" class="facts-list">
+                                <li class="empty-state">No facts in the database. Use the console to populate.</li>
+                            </ul>
+                        </div>
+                        <button id="btn-reset-world" class="action-btn secondary-btn">
+                            <span>Reset Database</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Interactive Query Console -->
+                <div class="card console-card">
+                    <div class="card-header">
+                        <div class="stage-badge">Console</div>
+                        <h3 class="card-title">Logic & Query Terminal</h3>
+                    </div>
+                    <div class="card-body">
+                        <p class="card-desc">Execute commands like <code>(assert (lazy dog))</code> or queries like <code>(lazy ?x)</code> or <code>(and (chased ?x ?y) (lazy ?x))</code>.</p>
+                        <div class="console-wrapper">
+                            <div id="console-log" class="console-log">
+                                <div class="log-entry system-msg">EngLISP S-Expression Interpreter ready. Try typing a query or assertion below.</div>
+                            </div>
+                            <div class="console-input-row">
+                                <span class="console-prompt">&gt;</span>
+                                <input type="text" id="console-input" placeholder="Enter query or assertion (e.g. (chased ?x cat))" autocomplete="off" />
+                                <button id="btn-submit-console" class="action-btn accent-btn">Execute</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+        </section>
+
+        <!-- Native Lisp/Scheme Compiler Section -->
+        <section class="compiler-section">
+            <h2 class="section-title">Native Lisp & Scheme Compilation</h2>
+            <div class="card compiler-card" style="margin-top: 1rem;">
+                <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <div class="stage-badge">Compiler</div>
+                        <h3 class="card-title">Native Code Generator</h3>
+                    </div>
+                    <div class="xbar-tabs" style="border: none; margin: 0; padding: 0;">
+                        <button class="tab-btn active" id="compiler-tab-cl">Common Lisp</button>
+                        <button class="tab-btn" id="compiler-tab-scheme">Scheme</button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <p class="card-desc">Compile current EngLISP S-expressions into executable, standalone code using native Lisp/Scheme macros and runtimes.</p>
+                    <pre id="compiled-code-output" class="code-output" style="max-height: 400px; overflow-y: auto; text-align: left; background: rgba(0, 0, 0, 0.4); border: 1px solid var(--glass-border); padding: 1rem; border-radius: 8px; font-family: var(--font-mono); font-size: 0.9rem; color: #a7f3d0; white-space: pre-wrap; word-break: break-all; margin-top: 1rem;">Waiting for S-expression...</pre>
+                </div>
+            </div>
+        </section>
+
+
+        <!-- Information footer about transformations -->
+        <footer class="pipeline-info">
+            <div class="info-card">
+                <h4>Forward Pipeline (Compression)</h4>
+                <ul>
+                    <li><strong>Parsing:</strong> NL &rarr; X-bar syntax tree (standard linguistic constituents).</li>
+                    <li><strong>Canonicalization:</strong> X-bar &rarr; EngLISP S-expression (Verbs/Heads rotated to front).</li>
+                    <li><strong>Minimization:</strong> EngLISP &rarr; MinimaLIST (compresses double negatives, strips determiners).</li>
+                </ul>
+            </div>
+            <div class="info-card">
+                <h4>Reverse Pipeline (Generation)</h4>
+                <ul>
+                    <li><strong>Expansion:</strong> MinimaLIST &rarr; EngLISP (restores default articles and structures).</li>
+                    <li><strong>Linguistic Mapping:</strong> EngLISP &rarr; X-bar (rebuilds grammatical tree skeletons).</li>
+                    <li><strong>Text Synthesis:</strong> X-bar &rarr; Natural Language (synthesizes words in correct syntax).</li>
+                </ul>
+            </div>
+        </footer>
+    </div>
+    
+    <script src="app.js"></script>
+</body>
+</html>
