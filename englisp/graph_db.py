@@ -30,11 +30,19 @@ class SemanticGraphDB:
         self.nodes: Dict[str, Dict[str, Any]] = {}
         # list of tuples: (source_node_id, target_node_id, relation_type)
         self.edges: List[Tuple[str, str, str]] = []
+        
+        # Optimized lookup structures
+        self.out_edges: Dict[str, List[Tuple[str, str]]] = {}
+        self.in_edges: Dict[str, List[Tuple[str, str]]] = {}
+        self._edges_set: Set[Tuple[str, str, str]] = set()
 
     def clear(self):
         """Clears all nodes and edges from the database."""
         self.nodes.clear()
         self.edges.clear()
+        self.out_edges.clear()
+        self.in_edges.clear()
+        self._edges_set.clear()
 
     def add_node(self, node_id: str, properties: Dict[str, Any] = None):
         """Adds a node with optional properties to the graph."""
@@ -48,14 +56,34 @@ class SemanticGraphDB:
         self.add_node(source)
         self.add_node(target)
         edge = (source, target, rel_type)
-        if edge not in self.edges:
+        if edge not in self._edges_set:
             self.edges.append(edge)
+            self._edges_set.add(edge)
+            
+            if source not in self.out_edges:
+                self.out_edges[source] = []
+            self.out_edges[source].append((target, rel_type))
+            
+            if target not in self.in_edges:
+                self.in_edges[target] = []
+            self.in_edges[target].append((source, rel_type))
 
     def remove_edge(self, source: str, target: str, rel_type: str):
         """Removes a specific edge from the graph."""
         edge = (source, target, rel_type)
-        if edge in self.edges:
+        if edge in self._edges_set:
             self.edges.remove(edge)
+            self._edges_set.remove(edge)
+            
+            if source in self.out_edges:
+                self.out_edges[source] = [item for item in self.out_edges[source] if item != (target, rel_type)]
+                if not self.out_edges[source]:
+                    del self.out_edges[source]
+                    
+            if target in self.in_edges:
+                self.in_edges[target] = [item for item in self.in_edges[target] if item != (source, rel_type)]
+                if not self.in_edges[target]:
+                    del self.in_edges[target]
 
     def traverse_is_a(self, node_id: str) -> Set[str]:
         """
@@ -68,10 +96,11 @@ class SemanticGraphDB:
             curr = queue.pop(0)
             if curr not in visited:
                 visited.add(curr)
-                # Add all target concepts connected via IS_A edges
-                for src, tgt, rel in self.edges:
-                    if src == curr and rel.upper() == "IS_A":
-                        queue.append(tgt)
+                # Add all target concepts connected via IS_A edges (O(1) outgoing edge query)
+                if curr in self.out_edges:
+                    for tgt, rel in self.out_edges[curr]:
+                        if rel.upper() == "IS_A":
+                            queue.append(tgt)
         return visited
 
     def add_fact(self, pred: str, args: List[str]):
@@ -121,15 +150,16 @@ class SemanticGraphDB:
             to_remove_node = None
             for node_id, props in list(self.nodes.items()):
                 if props.get("type") == "relation" and props.get("pred") == pred:
-                    # check if args match
+                    # check if args match using optimized out_edges lookup
                     rel_args = {}
-                    for src, tgt, rel in self.edges:
-                        if src == node_id and rel.startswith("arg_"):
-                            try:
-                                idx = int(rel.split("_")[1])
-                                rel_args[idx] = tgt
-                            except ValueError:
-                                pass
+                    if node_id in self.out_edges:
+                        for tgt, rel in self.out_edges[node_id]:
+                            if rel.startswith("arg_"):
+                                try:
+                                    idx = int(rel.split("_")[1])
+                                    rel_args[idx] = tgt
+                                except ValueError:
+                                    pass
                     matched = True
                     if len(rel_args) == len(args):
                         for idx, arg in enumerate(args):
@@ -144,9 +174,21 @@ class SemanticGraphDB:
             if to_remove_node:
                 # remove node
                 del self.nodes[to_remove_node]
-                # remove edges
-                self.edges = [e for e in self.edges if e[0] != to_remove_node]
-
+                # remove edges and clean indexes
+                edges_to_keep = []
+                for e in self.edges:
+                    if e[0] == to_remove_node:
+                        self._edges_set.discard(e)
+                        target, rel_type = e[1], e[2]
+                        if target in self.in_edges:
+                            self.in_edges[target] = [item for item in self.in_edges[target] if item != (to_remove_node, rel_type)]
+                            if not self.in_edges[target]:
+                                del self.in_edges[target]
+                    else:
+                        edges_to_keep.append(e)
+                self.edges = edges_to_keep
+                if to_remove_node in self.out_edges:
+                    del self.out_edges[to_remove_node]
 
     def query(self, pred: str, args: List[str]) -> bool:
         """
@@ -167,18 +209,18 @@ class SemanticGraphDB:
             if pred in ancestors_list[0]:
                 return True
             for anc in ancestors_list[0]:
-                for src, tgt, rel in self.edges:
-                    if src == anc and rel == "property" and tgt == pred:
-                        return True
+                if anc in self.out_edges:
+                    for tgt, rel in self.out_edges[anc]:
+                        if rel == "property" and tgt == pred:
+                            return True
             return False
 
-        # 3. Binary relation query: check if relation exists between any pair of ancestors
+        # 3. Binary relation query: check if relation exists between any pair of ancestors (O(1) check)
         elif len(args) == 2:
             for anc1 in ancestors_list[0]:
                 for anc2 in ancestors_list[1]:
-                    for src, tgt, rel in self.edges:
-                        if src == anc1 and tgt == anc2 and rel == pred:
-                            return True
+                    if (anc1, anc2, pred) in self._edges_set:
+                         return True
             return False
 
         # 4. Ternary or higher arity query: match against relation hypernodes
@@ -187,13 +229,14 @@ class SemanticGraphDB:
                 if props.get("type") == "relation" and props.get("pred") == pred:
                     # Gather linked arguments of the hypernode
                     rel_args = {}
-                    for src, tgt, rel in self.edges:
-                        if src == node_id and rel.startswith("arg_"):
-                            try:
-                                idx = int(rel.split("_")[1])
-                                rel_args[idx] = tgt
-                            except ValueError:
-                                pass
+                    if node_id in self.out_edges:
+                        for tgt, rel in self.out_edges[node_id]:
+                            if rel.startswith("arg_"):
+                                try:
+                                    idx = int(rel.split("_")[1])
+                                    rel_args[idx] = tgt
+                                except ValueError:
+                                    pass
                     if len(rel_args) == len(args):
                         matches = True
                         for idx, anc_set in enumerate(ancestors_list):
@@ -226,13 +269,14 @@ class SemanticGraphDB:
             if props.get("type") == "relation":
                 pred = props["pred"]
                 args_map = {}
-                for src, tgt, rel in self.edges:
-                    if src == node_id and rel.startswith("arg_"):
-                        try:
-                            idx = int(rel.split("_")[1])
-                            args_map[idx] = tgt
-                        except ValueError:
-                            pass
+                if node_id in self.out_edges:
+                    for tgt, rel in self.out_edges[node_id]:
+                        if rel.startswith("arg_"):
+                            try:
+                                idx = int(rel.split("_")[1])
+                                args_map[idx] = tgt
+                            except ValueError:
+                                pass
                 args = [args_map[i] for i in sorted(args_map.keys())]
                 facts.add((pred, *args))
 

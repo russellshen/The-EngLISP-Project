@@ -23,7 +23,7 @@ from datetime import datetime
 from fastapi import FastAPI, HTTPException, Depends, Header, Query, Request, status
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional, Dict, Any, List
 
 from englisp import parser, canonicalizer, minimizer
@@ -46,6 +46,18 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+def check_sexpr_depth(s: str, max_depth: int = 50) -> bool:
+    """Checks if the nesting depth of parentheses in the string exceeds max_depth."""
+    depth = 0
+    for char in s:
+        if char == '(':
+            depth += 1
+            if depth > max_depth:
+                return False
+        elif char == ')':
+            depth -= 1
+    return True
 
 # Instantiate global world state for S-expression interpreter
 world_model = WorldModel()
@@ -128,30 +140,85 @@ def get_auth_user(
 
 # Request and Response schemas
 class ParseRequest(BaseModel):
-    text: str
-    lang: Optional[str] = None
+    text: str = Field(
+        ...,
+        max_length=300,
+        description="Natural language sentence to parse. Maximum 300 characters.",
+        examples=["The dog chased the cat."]
+    )
+    lang: Optional[str] = Field(
+        None,
+        description="Optional language override ('en' for English, 'fr' for French). Defaults to auto-detection.",
+        examples=["en"]
+    )
 
 class MinimaLISTRequest(BaseModel):
-    minimalist: str
-    lang: Optional[str] = None
+    minimalist: str = Field(
+        ...,
+        max_length=1000,
+        description="MinimaLIST S-expression string to generate from. Maximum 1000 characters.",
+        examples=["(chased (dog the) (cat the))"]
+    )
+    lang: Optional[str] = Field(
+        None,
+        description="Target generation language ('en' for English, 'fr' for French). Defaults to 'en'.",
+        examples=["fr"]
+    )
 
 class EngLISPRequest(BaseModel):
-    englisp: str
-    lang: Optional[str] = None
+    englisp: str = Field(
+        ...,
+        max_length=1000,
+        description="EngLISP S-expression string to generate from or compile. Maximum 1000 characters.",
+        examples=["(chased (dog the) (cat the))"]
+    )
+    lang: Optional[str] = Field(
+        None,
+        description="Target generation language ('en' for English, 'fr' for French). Defaults to 'en'.",
+        examples=["en"]
+    )
 
 class InterpretRequest(BaseModel):
-    expr: str
+    expr: str = Field(
+        ...,
+        max_length=1000,
+        description="EngLISP assertion or query S-expression. Maximum 1000 characters.",
+        examples=["(chased dog cat)"]
+    )
 
 class CompileRequest(BaseModel):
-    expr: str
-    target: str = "common-lisp"
+    expr: str = Field(
+        ...,
+        max_length=1000,
+        description="EngLISP S-expression to compile to Lisp/Scheme. Maximum 1000 characters.",
+        examples=["(chased (dog the) (cat the))"]
+    )
+    target: str = Field(
+        "common-lisp",
+        description="Target compilation dialect ('common-lisp' or 'scheme').",
+        examples=["scheme"]
+    )
 
 class AuthRequest(BaseModel):
-    email: str
-    password: str
+    email: str = Field(
+        ...,
+        max_length=100,
+        description="User email address for account registration/login.",
+        examples=["user@example.com"]
+    )
+    password: str = Field(
+        ...,
+        max_length=100,
+        description="User password (minimum 6 characters).",
+        examples=["password123"]
+    )
 
 class SubscribeRequest(BaseModel):
-    duration_seconds: int = 2592000 # Default 30 days
+    duration_seconds: int = Field(
+        2592000,
+        description="Subscription duration in seconds (default 30 days = 2592000).",
+        examples=[60]
+    )
 
 # --- Authentication & User Endpoints ---
 
@@ -299,10 +366,12 @@ def api_parse(req: ParseRequest, user: Optional[dict] = Depends(get_auth_user)):
 @app.post("/api/generate-from-minimalist")
 def api_generate_from_minimalist(req: MinimaLISTRequest, user: Optional[dict] = Depends(get_auth_user)):
     CURRENT_USER_TIER.set(user["tier"] if user else "free")
+    min_str = req.minimalist.strip()
+    if not min_str:
+        raise HTTPException(status_code=400, detail="MinimaLIST S-expression cannot be empty.")
+    if not check_sexpr_depth(min_str):
+        raise HTTPException(status_code=400, detail="S-expression nesting depth exceeds limit of 50.")
     try:
-        min_str = req.minimalist.strip()
-        if not min_str:
-            raise HTTPException(status_code=400, detail="MinimaLIST S-expression cannot be empty.")
 
         lang = req.lang
         if not lang or lang == "auto":
@@ -337,10 +406,12 @@ def api_generate_from_minimalist(req: MinimaLISTRequest, user: Optional[dict] = 
 @app.post("/api/generate-from-englisp")
 def api_generate_from_englisp(req: EngLISPRequest, user: Optional[dict] = Depends(get_auth_user)):
     CURRENT_USER_TIER.set(user["tier"] if user else "free")
+    el_str = req.englisp.strip()
+    if not el_str:
+        raise HTTPException(status_code=400, detail="EngLISP S-expression cannot be empty.")
+    if not check_sexpr_depth(el_str):
+        raise HTTPException(status_code=400, detail="S-expression nesting depth exceeds limit of 50.")
     try:
-        el_str = req.englisp.strip()
-        if not el_str:
-            raise HTTPException(status_code=400, detail="EngLISP S-expression cannot be empty.")
 
         lang = req.lang
         if not lang or lang == "auto":
@@ -380,10 +451,12 @@ def get_world(user: Optional[dict] = Depends(get_auth_user)):
 @app.post("/api/interpret")
 def interpret_sexpr(req: InterpretRequest, user: Optional[dict] = Depends(get_auth_user)):
     CURRENT_USER_TIER.set(user["tier"] if user else "free")
+    expr_str = req.expr.strip()
+    if not expr_str:
+        raise HTTPException(status_code=400, detail="Expression cannot be empty.")
+    if not check_sexpr_depth(expr_str):
+        raise HTTPException(status_code=400, detail="S-expression nesting depth exceeds limit of 50.")
     try:
-        expr_str = req.expr.strip()
-        if not expr_str:
-            raise HTTPException(status_code=400, detail="Expression cannot be empty.")
         
         expr = canonicalizer.parse_sexpr(expr_str)
         result = evaluate(expr, world_model)
@@ -405,10 +478,12 @@ def reset_world(user: Optional[dict] = Depends(get_auth_user)):
 @app.post("/api/compile")
 def compile_endpoint(req: CompileRequest, user: Optional[dict] = Depends(get_auth_user)):
     CURRENT_USER_TIER.set(user["tier"] if user else "free")
+    expr_str = req.expr.strip()
+    if not expr_str:
+        raise HTTPException(status_code=400, detail="Expression cannot be empty.")
+    if not check_sexpr_depth(expr_str):
+        raise HTTPException(status_code=400, detail="S-expression nesting depth exceeds limit of 50.")
     try:
-        expr_str = req.expr.strip()
-        if not expr_str:
-            raise HTTPException(status_code=400, detail="Expression cannot be empty.")
         
         wrapped = f"({expr_str})"
         expressions = canonicalizer.parse_sexpr(wrapped)
