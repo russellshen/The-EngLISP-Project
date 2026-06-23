@@ -30,3 +30,7 @@ englisp/resources/french_gender_*.lson
 englisp/resources/synsets_*.lson
 englisp/resources/word_to_synsets_*.lson
 
+# SQLite Database Files
+web/users.db
+*.db
+

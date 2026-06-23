@@ -8,6 +8,7 @@
 
 import os
 import time
+from datetime import datetime
 from fastapi import FastAPI, HTTPException, Depends, Header, Query, Request, status
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -15,13 +16,24 @@ from pydantic import BaseModel
 from typing import Optional, Dict, Any, List
 
 from englisp import parser, canonicalizer, minimizer
+from englisp.loader import CURRENT_USER_TIER
 from englisp.interpreter import WorldModel, evaluate
 from web import database
+
+from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI(
     title="EngLISP Bridge Server",
     description="A bidirectional bridge between natural language and computation with identity management.",
     version="1.1.0"
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # Instantiate global world state for S-expression interpreter
@@ -76,6 +88,7 @@ def get_auth_user(
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
                 detail="Sandbox rate limit exceeded (Max 5 requests per minute without an account). Please register for a free account to get 100 queries/month."
             )
+        CURRENT_USER_TIER.set("free")
         return None # Anonymous Sandbox user
         
     user = database.get_user_by_api_key(key)
@@ -84,6 +97,15 @@ def get_auth_user(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid API Key."
         )
+        
+    # Check subscription expiration
+    if user["tier"] == "paid" and user["subscription_expires_at"]:
+        now = datetime.utcnow().isoformat()
+        if now > user["subscription_expires_at"]:
+            # Auto downgrade
+            user = database.downgrade_user_subscription(user["email"])
+            
+    CURRENT_USER_TIER.set(user["tier"])
         
     if user["quota_used"] >= user["quota_limit"]:
         raise HTTPException(
@@ -116,6 +138,9 @@ class CompileRequest(BaseModel):
 class AuthRequest(BaseModel):
     email: str
     password: str
+
+class SubscribeRequest(BaseModel):
+    duration_seconds: int = 2592000 # Default 30 days
 
 # --- Authentication & User Endpoints ---
 
@@ -186,13 +211,32 @@ def api_me(user: Optional[dict] = Depends(get_auth_user)):
         "tier": user["tier"],
         "quota_limit": user["quota_limit"],
         "quota_used": user["quota_used"],
-        "api_key": user["api_key"]
+        "api_key": user["api_key"],
+        "subscription_expires_at": user.get("subscription_expires_at"),
+        "status": user.get("status")
+    }
+
+@app.post("/api/auth/subscribe")
+def api_subscribe(req: SubscribeRequest, user: Optional[dict] = Depends(get_auth_user)):
+    if not user:
+        raise HTTPException(status_code=401, detail="Authentication required to subscribe.")
+    updated_user = database.subscribe_user(user["email"], req.duration_seconds)
+    if not updated_user:
+        raise HTTPException(status_code=500, detail="Failed to activate subscription.")
+    return {
+        "success": True,
+        "message": "Subscription activated successfully.",
+        "tier": updated_user["tier"],
+        "quota_limit": updated_user["quota_limit"],
+        "subscription_expires_at": updated_user["subscription_expires_at"],
+        "status": updated_user["status"]
     }
 
 # --- Core EngLISP Pipeline API Endpoints ---
 
 @app.post("/api/parse")
 def api_parse(req: ParseRequest, user: Optional[dict] = Depends(get_auth_user)):
+    CURRENT_USER_TIER.set(user["tier"] if user else "free")
     try:
         text = req.text.strip()
         if not text:
@@ -243,6 +287,7 @@ def api_parse(req: ParseRequest, user: Optional[dict] = Depends(get_auth_user)):
 
 @app.post("/api/generate-from-minimalist")
 def api_generate_from_minimalist(req: MinimaLISTRequest, user: Optional[dict] = Depends(get_auth_user)):
+    CURRENT_USER_TIER.set(user["tier"] if user else "free")
     try:
         min_str = req.minimalist.strip()
         if not min_str:
@@ -280,6 +325,7 @@ def api_generate_from_minimalist(req: MinimaLISTRequest, user: Optional[dict] = 
 
 @app.post("/api/generate-from-englisp")
 def api_generate_from_englisp(req: EngLISPRequest, user: Optional[dict] = Depends(get_auth_user)):
+    CURRENT_USER_TIER.set(user["tier"] if user else "free")
     try:
         el_str = req.englisp.strip()
         if not el_str:
@@ -322,6 +368,7 @@ def get_world(user: Optional[dict] = Depends(get_auth_user)):
 
 @app.post("/api/interpret")
 def interpret_sexpr(req: InterpretRequest, user: Optional[dict] = Depends(get_auth_user)):
+    CURRENT_USER_TIER.set(user["tier"] if user else "free")
     try:
         expr_str = req.expr.strip()
         if not expr_str:
@@ -346,6 +393,7 @@ def reset_world(user: Optional[dict] = Depends(get_auth_user)):
 
 @app.post("/api/compile")
 def compile_endpoint(req: CompileRequest, user: Optional[dict] = Depends(get_auth_user)):
+    CURRENT_USER_TIER.set(user["tier"] if user else "free")
     try:
         expr_str = req.expr.strip()
         if not expr_str:

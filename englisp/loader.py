@@ -177,11 +177,15 @@ def get_partition_char(word: str) -> str:
     ascii_char = "".join(c for c in normalized if c.isascii() and c.isalpha())
     return ascii_char if ascii_char else "other"
 
+import contextvars
+CURRENT_USER_TIER = contextvars.ContextVar("CURRENT_USER_TIER", default="free")
+
 class LazyPartitionedDict(dict):
-    def __init__(self, lang_prefix: str, pattern: str, load_fn):
+    def __init__(self, lang_prefix: str, pattern: str, load_fn, force_sample: bool = False):
         self.lang_prefix = lang_prefix
         self.pattern = pattern
         self.load_fn = load_fn
+        self.force_sample = force_sample
         self.loaded_partitions = set()
         super().__init__()
 
@@ -191,17 +195,25 @@ class LazyPartitionedDict(dict):
         p = get_partition_char(word)
         if p not in self.loaded_partitions:
             self.loaded_partitions.add(p)
-            filename = self.pattern.format(prefix=self.lang_prefix, char=p)
-            try:
-                part_data = self.load_fn(filename)
-                self.update(part_data)
-            except FileNotFoundError:
+            if self.force_sample:
                 fallback_filename = f"sample_{self.lang_prefix}.lson"
                 try:
                     part_data = self.load_fn(fallback_filename)
                     self.update(part_data)
                 except FileNotFoundError:
                     pass
+            else:
+                filename = self.pattern.format(prefix=self.lang_prefix, char=p)
+                try:
+                    part_data = self.load_fn(filename)
+                    self.update(part_data)
+                except FileNotFoundError:
+                    fallback_filename = f"sample_{self.lang_prefix}.lson"
+                    try:
+                        part_data = self.load_fn(fallback_filename)
+                        self.update(part_data)
+                    except FileNotFoundError:
+                        pass
 
     def _load_all_partitions(self):
         for char in "abcdefghijklmnopqrstuvwxyz":
@@ -242,7 +254,8 @@ class LazyPartitionedDict(dict):
 
 
 class LazySynsets(dict):
-    def __init__(self):
+    def __init__(self, force_sample: bool = False):
+        self.force_sample = force_sample
         self.loaded_partitions = set()
         super().__init__()
 
@@ -252,16 +265,23 @@ class LazySynsets(dict):
         prefix = syn_id[:3]
         if prefix not in self.loaded_partitions:
             self.loaded_partitions.add(prefix)
-            filename = f"synsets_{prefix}.lson"
-            try:
-                part_data = load_babelnet(filename)
-                self.update(part_data)
-            except FileNotFoundError:
+            if self.force_sample:
                 try:
                     part_data = load_babelnet("sample_synsets.lson")
                     self.update(part_data)
                 except FileNotFoundError:
                     pass
+            else:
+                filename = f"synsets_{prefix}.lson"
+                try:
+                    part_data = load_babelnet(filename)
+                    self.update(part_data)
+                except FileNotFoundError:
+                    try:
+                        part_data = load_babelnet("sample_synsets.lson")
+                        self.update(part_data)
+                    except FileNotFoundError:
+                        pass
 
     def __contains__(self, key: Any) -> bool:
         self._load_partition_for_id(key)
@@ -276,18 +296,68 @@ class LazySynsets(dict):
         return super().get(key, default)
 
 
+class TierDelegatingDict(dict):
+    def __init__(self, sample_dict, full_dict):
+        self.sample_dict = sample_dict
+        self.full_dict = full_dict
+    def _get_active(self):
+        tier = CURRENT_USER_TIER.get()
+        return self.full_dict if tier == "paid" else self.sample_dict
+    def __contains__(self, key) -> bool:
+        return key in self._get_active()
+    def __getitem__(self, key) -> Any:
+        return self._get_active()[key]
+    def get(self, key, default=None) -> Any:
+        return self._get_active().get(key, default)
+    def keys(self):
+        return self._get_active().keys()
+    def values(self):
+        return self._get_active().values()
+    def items(self):
+        return self._get_active().items()
+    def __iter__(self):
+        return iter(self._get_active())
+    def __len__(self):
+        return len(self._get_active())
+
+
 # Lazy loading dictionary structures
-LEXICON = LazyPartitionedDict("en_lexicon", "{prefix}_{char}.lson", load_dict)
-FRENCH_LEXICON = LazyPartitionedDict("fr_lexicon", "{prefix}_{char}.lson", load_dict)
-FRENCH_TO_ENGLISH_VOCAB = LazyPartitionedDict("french_to_english_vocab", "{prefix}_{char}.lson", load_dict)
-ENGLISH_TO_FRENCH_VOCAB = LazyPartitionedDict("english_to_french_vocab", "{prefix}_{char}.lson", load_dict)
-FRENCH_GENDER = LazyPartitionedDict("french_gender", "{prefix}_{char}.lson", load_dict)
-ENGLISH_VERB_FORMS = LazyPartitionedDict("english_verb_forms", "{prefix}_{char}.lson", load_verb_forms)
-FRENCH_VERB_FORMS = LazyPartitionedDict("french_verb_forms", "{prefix}_{char}.lson", load_verb_forms)
-WORD_TO_SYNSETS = LazyPartitionedDict("word_to_synsets", "{prefix}_{char}.lson", load_dict)
+LEXICON_SAMPLE = LazyPartitionedDict("en_lexicon", "{prefix}_{char}.lson", load_dict, force_sample=True)
+LEXICON_FULL = LazyPartitionedDict("en_lexicon", "{prefix}_{char}.lson", load_dict, force_sample=False)
+LEXICON = TierDelegatingDict(LEXICON_SAMPLE, LEXICON_FULL)
+
+FRENCH_LEXICON_SAMPLE = LazyPartitionedDict("fr_lexicon", "{prefix}_{char}.lson", load_dict, force_sample=True)
+FRENCH_LEXICON_FULL = LazyPartitionedDict("fr_lexicon", "{prefix}_{char}.lson", load_dict, force_sample=False)
+FRENCH_LEXICON = TierDelegatingDict(FRENCH_LEXICON_SAMPLE, FRENCH_LEXICON_FULL)
+
+FRENCH_TO_ENGLISH_VOCAB_SAMPLE = LazyPartitionedDict("french_to_english_vocab", "{prefix}_{char}.lson", load_dict, force_sample=True)
+FRENCH_TO_ENGLISH_VOCAB_FULL = LazyPartitionedDict("french_to_english_vocab", "{prefix}_{char}.lson", load_dict, force_sample=False)
+FRENCH_TO_ENGLISH_VOCAB = TierDelegatingDict(FRENCH_TO_ENGLISH_VOCAB_SAMPLE, FRENCH_TO_ENGLISH_VOCAB_FULL)
+
+ENGLISH_TO_FRENCH_VOCAB_SAMPLE = LazyPartitionedDict("english_to_french_vocab", "{prefix}_{char}.lson", load_dict, force_sample=True)
+ENGLISH_TO_FRENCH_VOCAB_FULL = LazyPartitionedDict("english_to_french_vocab", "{prefix}_{char}.lson", load_dict, force_sample=False)
+ENGLISH_TO_FRENCH_VOCAB = TierDelegatingDict(ENGLISH_TO_FRENCH_VOCAB_SAMPLE, ENGLISH_TO_FRENCH_VOCAB_FULL)
+
+FRENCH_GENDER_SAMPLE = LazyPartitionedDict("french_gender", "{prefix}_{char}.lson", load_dict, force_sample=True)
+FRENCH_GENDER_FULL = LazyPartitionedDict("french_gender", "{prefix}_{char}.lson", load_dict, force_sample=False)
+FRENCH_GENDER = TierDelegatingDict(FRENCH_GENDER_SAMPLE, FRENCH_GENDER_FULL)
+
+ENGLISH_VERB_FORMS_SAMPLE = LazyPartitionedDict("english_verb_forms", "{prefix}_{char}.lson", load_verb_forms, force_sample=True)
+ENGLISH_VERB_FORMS_FULL = LazyPartitionedDict("english_verb_forms", "{prefix}_{char}.lson", load_verb_forms, force_sample=False)
+ENGLISH_VERB_FORMS = TierDelegatingDict(ENGLISH_VERB_FORMS_SAMPLE, ENGLISH_VERB_FORMS_FULL)
+
+FRENCH_VERB_FORMS_SAMPLE = LazyPartitionedDict("french_verb_forms", "{prefix}_{char}.lson", load_verb_forms, force_sample=True)
+FRENCH_VERB_FORMS_FULL = LazyPartitionedDict("french_verb_forms", "{prefix}_{char}.lson", load_verb_forms, force_sample=False)
+FRENCH_VERB_FORMS = TierDelegatingDict(FRENCH_VERB_FORMS_SAMPLE, FRENCH_VERB_FORMS_FULL)
+
+WORD_TO_SYNSETS_SAMPLE = LazyPartitionedDict("word_to_synsets", "{prefix}_{char}.lson", load_dict, force_sample=True)
+WORD_TO_SYNSETS_FULL = LazyPartitionedDict("word_to_synsets", "{prefix}_{char}.lson", load_dict, force_sample=False)
+WORD_TO_SYNSETS = TierDelegatingDict(WORD_TO_SYNSETS_SAMPLE, WORD_TO_SYNSETS_FULL)
 
 # Lazy loading synsets
-BABELNET_SYNSETS = LazySynsets()
+BABELNET_SYNSETS_SAMPLE = LazySynsets(force_sample=True)
+BABELNET_SYNSETS_FULL = LazySynsets(force_sample=False)
+BABELNET_SYNSETS = TierDelegatingDict(BABELNET_SYNSETS_SAMPLE, BABELNET_SYNSETS_FULL)
 
 # Flat loading rules (small files, loaded at startup)
 GRAMMAR = load_grammar("grammar.lson")

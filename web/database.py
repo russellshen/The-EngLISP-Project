@@ -29,9 +29,20 @@ def db_init():
             tier TEXT DEFAULT 'free',
             quota_limit INTEGER DEFAULT 100,
             quota_used INTEGER DEFAULT 0,
-            created_at TEXT NOT NULL
+            created_at TEXT NOT NULL,
+            subscription_expires_at TEXT,
+            status TEXT DEFAULT 'none'
         )
     """)
+    
+    # Migrations for existing database
+    cursor.execute("PRAGMA table_info(users)")
+    columns = [row[1] for row in cursor.fetchall()]
+    if "subscription_expires_at" not in columns:
+        cursor.execute("ALTER TABLE users ADD COLUMN subscription_expires_at TEXT")
+    if "status" not in columns:
+        cursor.execute("ALTER TABLE users ADD COLUMN status TEXT DEFAULT 'none'")
+        
     conn.commit()
     conn.close()
 
@@ -102,3 +113,37 @@ def update_user_tier(email: str, tier: str, quota_limit: int):
     cursor.execute("UPDATE users SET tier = ?, quota_limit = ? WHERE email = ?", (tier, quota_limit, email.lower().strip()))
     conn.commit()
     conn.close()
+
+def subscribe_user(email: str, duration_seconds: int) -> Optional[dict]:
+    """Sets a user to paid tier and calculates expiration timestamp."""
+    from datetime import datetime, timedelta
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    expires_at = (datetime.utcnow() + timedelta(seconds=duration_seconds)).isoformat()
+    try:
+        cursor.execute(
+            "UPDATE users SET tier = 'paid', status = 'active', quota_limit = 10000, subscription_expires_at = ? WHERE email = ?",
+            (expires_at, email.lower().strip())
+        )
+        conn.commit()
+        cursor.execute("SELECT * FROM users WHERE email = ?", (email.lower().strip(),))
+        row = cursor.fetchone()
+        return dict(row) if row else None
+    finally:
+        conn.close()
+
+def downgrade_user_subscription(email: str) -> Optional[dict]:
+    """Downgrades a user back to free tier when subscription expires."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            "UPDATE users SET tier = 'free', status = 'expired', quota_limit = 100, subscription_expires_at = NULL WHERE email = ?",
+            (email.lower().strip(),)
+        )
+        conn.commit()
+        cursor.execute("SELECT * FROM users WHERE email = ?", (email.lower().strip(),))
+        row = cursor.fetchone()
+        return dict(row) if row else None
+    finally:
+        conn.close()
