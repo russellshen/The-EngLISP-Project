@@ -5,6 +5,17 @@
 #
 # Commercial use, proprietary use, or use in closed-source or revenue-generating projects 
 # is strictly prohibited under this license.
+#
+# For commercial licensing inquiries, please contact:
+# Russell Shen (russellshen7@gmail.com)
+#
+# Licensing terms, scope, and compensation are subject to separate negotiation.
+#
+# Reference the footer section of any of the 4 .md files (README.md, SPECIFICATION.md,
+# USE_CASES.md, LEXICAL_STRATEGIES.md) in the project's root directory for full licensing details.
+#
+# I am the sole original creator of the EngLISP project (around August 2025), and did not rely on
+# the resources of any academic institution or private individual to develop it.
 
 import pytest
 from datetime import datetime, timedelta
