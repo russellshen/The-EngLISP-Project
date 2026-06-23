@@ -5,6 +5,11 @@
 #
 # Commercial use, proprietary use, or use in closed-source or revenue-generating projects 
 # is strictly prohibited under this license.
+#
+# For commercial licensing inquiries, please contact:
+# Russell Shen (russellshen7@gmail.com)
+#
+# Licensing terms, scope, and compensation are subject to separate negotiation.
 
 import os
 import time

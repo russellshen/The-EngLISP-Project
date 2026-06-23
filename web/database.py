@@ -2,6 +2,14 @@
 #
 # This source code is licensed under the Creative Commons Attribution-NonCommercial-NoDerivatives 
 # 4.0 International (CC BY-NC-ND 4.0) license. 
+#
+# Commercial use, proprietary use, or use in closed-source or revenue-generating projects 
+# is strictly prohibited under this license.
+#
+# For commercial licensing inquiries, please contact:
+# Russell Shen (russellshen7@gmail.com)
+#
+# Licensing terms, scope, and compensation are subject to separate negotiation.
 
 import os
 import sqlite3
