@@ -366,8 +366,6 @@ def evaluate_query_with_bindings(
             
             # (A) Query direct database facts
             import itertools
-            entities = list(model.db.nodes.keys())
-            
             unbound_vars = [arg for arg in query_args_syn if arg.startswith("?") and arg not in b_syn]
             if not unbound_vars:
                 ground_args_syn = [b_syn.get(arg, arg) for arg in query_args_syn]
@@ -378,14 +376,154 @@ def evaluate_query_with_bindings(
                     if fact_log not in model.proof_steps:
                         model.proof_steps.append(fact_log)
             else:
-                for vals in itertools.product(entities, repeat=len(unbound_vars)):
+                db = model.db
+                candidates = []
+                
+                if query_pred_syn.upper() == "IS_A" and len(query_args_syn) == 2:
+                    arg0_pattern = b_syn.get(query_args_syn[0], query_args_syn[0])
+                    arg1_pattern = b_syn.get(query_args_syn[1], query_args_syn[1])
+                    
+                    if not arg0_pattern.startswith("?") and arg1_pattern.startswith("?"):
+                        for anc in db.traverse_is_a(arg0_pattern):
+                            candidates.append((arg0_pattern, anc))
+                    elif arg0_pattern.startswith("?") and not arg1_pattern.startswith("?"):
+                        descendants = set()
+                        queue = [arg1_pattern]
+                        while queue:
+                            curr = queue.pop(0)
+                            if curr not in descendants:
+                                descendants.add(curr)
+                                if curr in db.in_edges:
+                                    for src, rel in db.in_edges[curr]:
+                                        if rel.upper() == "IS_A":
+                                            queue.append(src)
+                        for desc in descendants:
+                            candidates.append((desc, arg1_pattern))
+                    elif arg0_pattern.startswith("?") and arg1_pattern.startswith("?"):
+                        for node in db.nodes:
+                            for anc in db.traverse_is_a(node):
+                                candidates.append((node, anc))
+                                
+                elif len(query_args_syn) == 1:
+                    arg0_pattern = b_syn.get(query_args_syn[0], query_args_syn[0])
+                    if arg0_pattern.startswith("?"):
+                        target_nodes = set()
+                        for node_id, props in db.nodes.items():
+                            if node_id in db.out_edges:
+                                for tgt, rel in db.out_edges[node_id]:
+                                    if (rel == "property" and tgt == query_pred_syn) or (rel.upper() == "IS_A" and tgt == query_pred_syn):
+                                        target_nodes.add(node_id)
+                        matching_nodes = set()
+                        for target in target_nodes:
+                            queue = [target]
+                            while queue:
+                                curr = queue.pop(0)
+                                if curr not in matching_nodes:
+                                    matching_nodes.add(curr)
+                                    if curr in db.in_edges:
+                                        for src, rel in db.in_edges[curr]:
+                                            if rel.upper() == "IS_A":
+                                                queue.append(src)
+                        for node in matching_nodes:
+                            candidates.append((node,))
+                            
+                elif len(query_args_syn) == 2:
+                    arg0_pattern = b_syn.get(query_args_syn[0], query_args_syn[0])
+                    arg1_pattern = b_syn.get(query_args_syn[1], query_args_syn[1])
+                    
+                    matching_edges = []
+                    for e in db.edges:
+                        if e[2] == query_pred_syn:
+                            matching_edges.append((e[0], e[1]))
+                            
+                    for s, t in matching_edges:
+                        desc_s = set()
+                        queue = [s]
+                        while queue:
+                            curr = queue.pop(0)
+                            if curr not in desc_s:
+                                desc_s.add(curr)
+                                if curr in db.in_edges:
+                                    for src, rel in db.in_edges[curr]:
+                                        if rel.upper() == "IS_A":
+                                            queue.append(src)
+                                            
+                        desc_t = set()
+                        queue = [t]
+                        while queue:
+                            curr = queue.pop(0)
+                            if curr not in desc_t:
+                                desc_t.add(curr)
+                                if curr in db.in_edges:
+                                    for src, rel in db.in_edges[curr]:
+                                        if rel.upper() == "IS_A":
+                                            queue.append(src)
+                                            
+                        for x in desc_s:
+                            if not arg0_pattern.startswith("?") and x != arg0_pattern:
+                                continue
+                            for y in desc_t:
+                                if not arg1_pattern.startswith("?") and y != arg1_pattern:
+                                    continue
+                                candidates.append((x, y))
+                                
+                else:
+                    arg_patterns = [b_syn.get(arg, arg) for arg in query_args_syn]
+                    for node_id, props in db.nodes.items():
+                        if props.get("type") == "relation" and props.get("pred") == query_pred_syn:
+                            rel_args = {}
+                            if node_id in db.out_edges:
+                                for tgt, rel in db.out_edges[node_id]:
+                                    if rel.startswith("arg_"):
+                                        try:
+                                            idx = int(rel.split("_")[1])
+                                            rel_args[idx] = tgt
+                                        except ValueError:
+                                            pass
+                            if len(rel_args) == len(query_args_syn):
+                                arg_options = []
+                                possible = True
+                                for idx, pat in enumerate(arg_patterns):
+                                    val = rel_args.get(idx)
+                                    desc_val = set()
+                                    queue = [val]
+                                    while queue:
+                                        curr = queue.pop(0)
+                                        if curr not in desc_val:
+                                            desc_val.add(curr)
+                                            if curr in db.in_edges:
+                                                for src, rel in db.in_edges[curr]:
+                                                    if rel.upper() == "IS_A":
+                                                        queue.append(src)
+                                    if not pat.startswith("?"):
+                                        if pat in desc_val:
+                                            arg_options.append([pat])
+                                        else:
+                                            possible = False
+                                            break
+                                    else:
+                                        arg_options.append(list(desc_val))
+                                if possible:
+                                    for combo in itertools.product(*arg_options):
+                                        candidates.append(combo)
+                                        
+                for vals in candidates:
                     b_ext_syn = b_syn.copy()
                     b_ext = b.copy()
-                    for var, val in zip(unbound_vars, vals):
-                        b_ext_syn[var] = val
-                        b_ext[var] = from_synset(val)
-                    ground_args_syn = [b_ext_syn.get(arg, arg) for arg in query_args_syn]
-                    if model.db.query(query_pred_syn, ground_args_syn):
+                    matched = True
+                    for arg_pattern, val in zip(query_args_syn, vals):
+                        if arg_pattern.startswith("?"):
+                            if arg_pattern in b_ext_syn and b_ext_syn[arg_pattern] != val:
+                                matched = False
+                                break
+                            b_ext_syn[arg_pattern] = val
+                            b_ext[arg_pattern] = from_synset(val)
+                        else:
+                            if b_syn.get(arg_pattern, arg_pattern) != val:
+                                matched = False
+                                break
+                    if matched:
+                        ground_args_syn = [b_ext_syn.get(arg, arg) for arg in query_args_syn]
                         if b_ext not in local_results:
                             local_results.append(b_ext)
                             fact_key = (from_synset(query_pred_syn), *(from_synset(a) for a in ground_args_syn))

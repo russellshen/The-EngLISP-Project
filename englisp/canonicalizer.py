@@ -23,95 +23,93 @@ from englisp.parser import tag_tokens
 from englisp.loader import (
     LEXICON, FRENCH_LEXICON, FRENCH_TO_ENGLISH_VOCAB, ENGLISH_TO_FRENCH_VOCAB,
     FRENCH_GENDER, FRENCH_ADJ_FEMININE, FRENCH_PRE_ADJECTIVES, TENSE_AUXILIARIES,
-    ENGLISH_VERB_FORMS, FRENCH_VERB_FORMS, parse_sexpr
+    ENGLISH_VERB_FORMS, FRENCH_VERB_FORMS, parse_sexpr, MORPHOLOGY_RULES
 )
 
 # A type representing a parsed S-Expression in Python (nested lists of strings)
 SExpr = Union[str, List[Any]]
 
-def inflect_english_verb(base: str, form_type: str) -> str:
+def inflect_verb(base: str, form_type: str, lang: str) -> str:
     base = base.lower()
-    if base in ENGLISH_VERB_FORMS:
-        forms = ENGLISH_VERB_FORMS[base]
-        idx = {"3sg": 0, "past": 1, "ing": 2, "pp": 3}[form_type]
-        return forms[idx]
-    if form_type == "3sg":
-        if base.endswith(("s", "sh", "ch", "x", "z", "o")):
-            return base + "es"
-        elif base.endswith("y") and not base.endswith(("ay", "ey", "oy", "uy")):
-            return base[:-1] + "ies"
-        return base + "s"
-    elif form_type in ("past", "pp"):
-        if base.endswith("e"):
-            return base + "d"
-        elif base.endswith("y") and not base.endswith(("ay", "ey", "oy", "uy")):
-            return base[:-1] + "ied"
-        return base + "ed"
-    elif form_type == "ing":
-        if base.endswith("e") and not base.endswith(("ee", "oe", "ye")):
-            return base[:-1] + "ing"
-        return base + "ing"
+    # 1. Database forms lookup
+    forms_dict = FRENCH_VERB_FORMS if lang == "fr" else ENGLISH_VERB_FORMS
+    if base in forms_dict:
+        forms = forms_dict[base]
+        idx_map = {
+            "fr": {"3sg": 0, "imp": 1, "fut": 2, "pp": 3, "inf": 4},
+            "en": {"3sg": 0, "past": 1, "ing": 2, "pp": 3}
+        }[lang]
+        if form_type in idx_map:
+            return forms[idx_map[form_type]]
+    
+    # 2. General morphological rules (parameterized by lang)
+    if lang == "en":
+        if form_type == "3sg":
+            if base.endswith(("s", "sh", "ch", "x", "z", "o")):
+                return base + "es"
+            elif base.endswith("y") and not base.endswith(("ay", "ey", "oy", "uy")):
+                return base[:-1] + "ies"
+            return base + "s"
+        elif form_type in ("past", "pp"):
+            if base.endswith("e"):
+                return base + "d"
+            elif base.endswith("y") and not base.endswith(("ay", "ey", "oy", "uy")):
+                return base[:-1] + "ied"
+            return base + "ed"
+        elif form_type == "ing":
+            if base.endswith("e") and not base.endswith(("ee", "oe", "ye")):
+                return base[:-1] + "ing"
+            return base + "ing"
+    elif lang == "fr":
+        stem = base[:-1] if base.endswith("e") else base
+        if form_type == "3sg":
+            return stem + "e"
+        elif form_type == "imp":
+            return stem + "ait"
+        elif form_type == "fut":
+            return stem + "era"
+        elif form_type == "pp":
+            return stem + "é"
+        elif form_type == "inf":
+            return stem + "er"
     return base
+
+def get_base_verb(verb_word: str, lang: str) -> str:
+    verb_word = verb_word.lower()
+    # Look up in database verb forms first
+    forms_dict = FRENCH_VERB_FORMS if lang == "fr" else ENGLISH_VERB_FORMS
+    for base, forms in forms_dict.items():
+        if verb_word in forms or verb_word == base:
+            return base
+    # Fallback to rules in MORPHOLOGY_RULES
+    rules = MORPHOLOGY_RULES.get(lang, {}).get("base_rules", [])
+    for suffix, replacement in rules:
+        if verb_word.endswith(suffix):
+            return verb_word[:-len(suffix)] + replacement
+    return verb_word
+
+def inflect_english_verb(base: str, form_type: str) -> str:
+    return inflect_verb(base, form_type, "en")
 
 def inflect_french_verb(base: str, form_type: str) -> str:
-    base = base.lower()
-    if base in FRENCH_VERB_FORMS:
-        forms = FRENCH_VERB_FORMS[base]
-        idx = {"3sg": 0, "imp": 1, "fut": 2, "pp": 3, "inf": 4}[form_type]
-        return forms[idx]
-    stem = base[:-1] if base.endswith("e") else base
-    if form_type == "3sg":
-        return stem + "e"
-    elif form_type == "imp":
-        return stem + "ait"
-    elif form_type == "fut":
-        return stem + "era"
-    elif form_type == "pp":
-        return stem + "é"
-    elif form_type == "inf":
-        return stem + "er"
-    return base
+    return inflect_verb(base, form_type, "fr")
 
 def get_english_base_verb(verb_word: str) -> str:
-    verb_word = verb_word.lower()
-    for base, forms in ENGLISH_VERB_FORMS.items():
-        if verb_word in forms or verb_word == base:
-            return base
-    if verb_word.endswith("ing"):
-        return verb_word[:-3]
-    if verb_word.endswith("es"):
-        return verb_word[:-2]
-    if verb_word.endswith("s"):
-        return verb_word[:-1]
-    if verb_word.endswith("ed"):
-        return verb_word[:-2]
-    return verb_word
+    return get_base_verb(verb_word, "en")
 
 def get_french_base_verb(verb_word: str) -> str:
-    verb_word = verb_word.lower()
-    for base, forms in FRENCH_VERB_FORMS.items():
-        if verb_word in forms or verb_word == base:
-            return base
-    if verb_word.endswith(("ait", "ais", "aient")):
-        return verb_word[:-3] + "e"
-    if verb_word.endswith("ant"):
-        return verb_word[:-3] + "e"
-    if verb_word.endswith("é"):
-        return verb_word[:-1] + "e"
-    if verb_word.endswith("er"):
-        return verb_word[:-2] + "e"
-    return verb_word
+    return get_base_verb(verb_word, "fr")
 
 def get_pivot_base_verb(verb_word: str, lang: str) -> str:
     verb_word = verb_word.lower()
     if verb_word.startswith("v") and len(verb_word) > 1 and verb_word[1].isdigit():
         return verb_word
     if lang == "fr":
-        fr_base = get_french_base_verb(verb_word)
+        fr_base = get_base_verb(verb_word, "fr")
         en_present = FRENCH_TO_ENGLISH_VOCAB.get(fr_base, fr_base)
-        return get_english_base_verb(en_present)
+        return get_base_verb(en_present, "en")
     else:
-        return get_english_base_verb(verb_word)
+        return get_base_verb(verb_word, "en")
 
 def get_tense_vector(aux_words: List[str], verb_word: str, lang: str) -> Tuple[int, int, str]:
     aux_words = [a.lower() for a in aux_words]

@@ -62,25 +62,28 @@ def test_pydantic_length_constraints():
         AuthRequest(email="user@example.com", password="p" * 101)
 
 def test_endpoint_depth_exceptions():
+    from fastapi.testclient import TestClient
+    from web.server import app
+    client = TestClient(app)
+    
     deep_expr = "(" * 51 + "test" + ")" * 51
     
-    # Verify that the endpoints raise HTTPException when depth limit is breached
-    with pytest.raises(HTTPException) as exc_info:
-        api_generate_from_minimalist(MinimaLISTRequest(minimalist=deep_expr), user=None)
-    assert exc_info.value.status_code == 400
-    assert "depth" in exc_info.value.detail
-
-    with pytest.raises(HTTPException) as exc_info:
-        api_generate_from_englisp(EngLISPRequest(englisp=deep_expr), user=None)
-    assert exc_info.value.status_code == 400
-    assert "depth" in exc_info.value.detail
-
-    with pytest.raises(HTTPException) as exc_info:
-        interpret_sexpr(InterpretRequest(expr=deep_expr), user=None)
-    assert exc_info.value.status_code == 400
-    assert "depth" in exc_info.value.detail
-
-    with pytest.raises(HTTPException) as exc_info:
-        compile_endpoint(CompileRequest(expr=deep_expr), user=None)
-    assert exc_info.value.status_code == 400
-    assert "depth" in exc_info.value.detail
+    # 1. generate-from-minimalist
+    response = client.post("/api/generate-from-minimalist", json={"minimalist": deep_expr})
+    assert response.status_code == 400
+    assert "depth" in response.json()["detail"]
+    
+    # 2. generate-from-englisp
+    response = client.post("/api/generate-from-englisp", json={"englisp": deep_expr})
+    assert response.status_code == 400
+    assert "depth" in response.json()["detail"]
+    
+    # 3. interpret
+    response = client.post("/api/interpret", json={"expr": deep_expr})
+    assert response.status_code == 400
+    assert "depth" in response.json()["detail"]
+    
+    # 4. compile
+    response = client.post("/api/compile", json={"expr": deep_expr, "target": "common-lisp"})
+    assert response.status_code == 400
+    assert "depth" in response.json()["detail"]

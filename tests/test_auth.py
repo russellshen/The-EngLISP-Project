@@ -91,10 +91,6 @@ def test_database_operations():
     assert updated_tier["quota_limit"] == 5000
 
 def test_auth_dependency():
-    # Clear active timestamp list for isolated rate-limiting checks
-    from web.server import ANONYMOUS_REQUEST_TIMESTAMPS
-    ANONYMOUS_REQUEST_TIMESTAMPS.clear()
-
     # Create a user
     hashed = database.hash_password("password123")
     user = database.create_user("user@englisp.com", hashed)
@@ -123,17 +119,7 @@ def test_auth_dependency():
     resolved_anon = get_auth_user(req)
     assert resolved_anon is None
 
-    # 5. Anonymous user exceeding sandbox limit (5 requests / min)
-    # We already made 1 anonymous request in check 4. Let's make 5 more.
-    # The 5th subsequent request should raise a 429.
-    for i in range(4):
-        get_auth_user(req) # 2nd, 3rd, 4th, 5th requests
-    with pytest.raises(HTTPException) as excinfo_429:
-        get_auth_user(req) # 6th request
-    assert excinfo_429.value.status_code == 429
-    assert "Sandbox rate limit exceeded" in excinfo_429.value.detail
-
-    # 6. User exceeding quota limits raises 402
+    # 5. User exceeding quota limits raises 402
     # Create user with limit 1
     user_q = database.create_user("quota@englisp.com", hashed)
     database.update_user_tier("quota@englisp.com", "free", 1)
@@ -150,3 +136,21 @@ def test_auth_dependency():
         get_auth_user(req, x_api_key=user_q["api_key"])
     assert excinfo_402.value.status_code == 402
     assert "API Quota exceeded" in excinfo_402.value.detail
+
+def test_auth_rate_limiting_with_client():
+    from fastapi.testclient import TestClient
+    from web.server import app, limiter
+    
+    # Reset slowapi limiter state
+    limiter.reset()
+    
+    client = TestClient(app)
+    # 5 requests should succeed (return 200)
+    for _ in range(5):
+        response = client.post("/api/parse", json={"text": "the dog runs"})
+        assert response.status_code == 200
+        
+    # 6th request should fail with 429
+    response = client.post("/api/parse", json={"text": "the dog runs"})
+    assert response.status_code == 429
+    assert "Sandbox rate limit exceeded" in response.json()["detail"]

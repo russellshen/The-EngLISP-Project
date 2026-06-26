@@ -99,3 +99,33 @@ def test_compile_program():
     assert "(define (chased . args)" in scheme_prog
     assert "(define-syntax run-statement" in scheme_prog
     assert '(run-statement (add-fact! "chased" "dog" "cat")' in scheme_prog
+
+def test_compile_clojure():
+    sexpr = canonicalizer.parse_sexpr("(chased (dog the) (cat the))")
+    clj_code = compile_sexpr(sexpr, target="clojure", is_assertion=False)
+    assert clj_code == '(chased "dog" "cat")'
+    
+    clj_assert = compile_sexpr(sexpr, target="clojure", is_assertion=True)
+    assert clj_assert == '(add-fact! "chased" "dog" "cat")'
+
+    # Let binding (clojure uses vector [d "dog"] and fn instead of lambda)
+    sexpr_let = canonicalizer.parse_sexpr("(let ((d (dog the))) (and (chased d (cat the)) (barked d)))")
+    clj_let = compile_sexpr(sexpr_let, target="clojure")
+    assert clj_let == '(let [d "dog"] (and (chased d "cat") (barked d)))'
+
+    # Quantifier
+    sexpr_quant = canonicalizer.parse_sexpr("(for-all dog (jumps _))")
+    clj_quant = compile_sexpr(sexpr_quant, target="clojure")
+    assert clj_quant == '(for-all "dog" (fn [_] (jumps _)))'
+
+    # Program compilation
+    sentences = [
+        "(assert (chased (dog the) (cat the)))",
+        "(for-all dog (jumps _))"
+    ]
+    clj_prog = compile_program(sentences, target="clojure")
+    assert "add-fact!" in clj_prog
+    assert "(defn chased [& args]" in clj_prog
+    assert "(defn jumps [& args]" in clj_prog
+    assert "(defmacro run-statement" in clj_prog
+    assert '(run-statement (add-fact! "chased" "dog" "cat")' in clj_prog

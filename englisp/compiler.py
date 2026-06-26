@@ -228,6 +228,91 @@ SCHEME_BOILERPLATE = """;;; ====================================================
        (newline)))))
 """
 
+CLOJURE_BOILERPLATE = """;;; ============================================================================
+;;; Clojure Runtime for EngLISP
+;;; ============================================================================
+
+(def facts (atom #{}))
+
+(defn add-fact! [pred & args]
+  (swap! facts conj (cons pred args))
+  true)
+
+(defn remove-fact! [pred & args]
+  (swap! facts disj (cons pred args))
+  true)
+
+(defn query-fact [pred & args]
+  (contains? @facts (cons pred args)))
+
+(defn find-instances [type-name]
+  (let [insts (atom #{})]
+    (doseq [f @facts]
+      (when (and (= (first f) type-name) (= (count f) 2))
+        (swap! insts conj (second f))))
+    (if (seq @insts)
+      (vec @insts)
+      (let [ents (atom #{})]
+        (doseq [f @facts]
+          (doseq [x (rest f)]
+            (when (= x type-name)
+              (swap! ents conj type-name))))
+        (vec @ents)))))
+
+(defn get-number-value [amount-word]
+  (cond
+    (or (= amount-word "one") (= amount-word "un")) 1
+    (or (= amount-word "two") (= amount-word "deux")) 2
+    (or (= amount-word "three") (= amount-word "trois")) 3
+    :else 1))
+
+(defn transfer-ownership [giver receiver item]
+  (remove-fact! "has" giver item)
+  (add-fact! "has" receiver item)
+  (str "Action gives: transferred " item " from " giver " to " receiver "."))
+
+(defn increase-value [item amount-word]
+  (let [amount (get-number-value amount-word)
+        current-val (atom 0)]
+    (doseq [f @facts]
+      (when (and (= (first f) "val") (= (second f) item))
+        (reset! current-val (Integer/parseInt (nth f 2)))
+        (remove-fact! "val" item (nth f 2))))
+    (let [new-val (+ @current-val amount)]
+      (add-fact! "val" item (str new-val))
+      (str "Action increases: increased " item " value by " amount " to " new-val "."))))
+
+(defn decrease-value [item amount-word]
+  (let [amount (get-number-value amount-word)
+        current-val (atom 0)]
+    (doseq [f @facts]
+      (when (and (= (first f) "val") (= (second f) item))
+        (reset! current-val (Integer/parseInt (nth f 2)))
+        (remove-fact! "val" item (nth f 2))))
+    (let [new-val (max 0 (- @current-val amount))]
+      (add-fact! "val" item (str new-val))
+      (str "Action decreases: decreased " item " value by " amount " to " new-val "."))))
+
+(defn for-all [type-name body-fn]
+  (let [instances (find-instances type-name)]
+    (if (empty? instances)
+      false
+      (every? body-fn instances))))
+
+(defn exists [type-name body-fn]
+  (let [instances (find-instances type-name)]
+    (if (empty? instances)
+      false
+      (boolean (some body-fn instances)))))
+
+(defmacro run-statement [expr text-desc]
+  `(let [res# ~expr]
+     (println "Evaluating:" ~text-desc)
+     (println "Result:" (pr-str res#))
+     (println)))
+"""
+
+
 def is_entity_phrase(sexpr: SExpr, bound_vars: Set[str]) -> bool:
     """Heuristic to check if an expression represents a noun phrase (entity) vs a predicate call."""
     if isinstance(sexpr, str):
@@ -300,6 +385,7 @@ def collect_custom_predicates(sexpr: SExpr) -> Set[str]:
 def compile_sexpr(sexpr: SExpr, target: str = "common-lisp", is_assertion: bool = False, bound_vars: Optional[Set[str]] = None) -> str:
     """Recursively translates a single EngLISP S-expression to target dialect code."""
     is_cl = target.lower() in ("common-lisp", "cl")
+    is_clj = target.lower() in ("clojure", "clj")
     bound_vars = bound_vars or set()
     
     # 1. Handle string terminals
@@ -356,16 +442,26 @@ def compile_sexpr(sexpr: SExpr, target: str = "common-lisp", is_assertion: bool 
                 for var, val in bindings:
                     new_bound_vars.add(var)
                     val_code = compile_sexpr(val, target, False, bound_vars)
-                    bind_pairs.append(f"({var} {val_code})")
-                bind_str = " ".join(bind_pairs)
-                body_code = compile_sexpr(body, target, is_assertion, new_bound_vars)
-                return f"(let ({bind_str}) {body_code})"
+                    if is_clj:
+                        bind_pairs.append(f"{var} {val_code}")
+                    else:
+                        bind_pairs.append(f"({var} {val_code})")
+                if is_clj:
+                    bind_str = " ".join(bind_pairs)
+                    body_code = compile_sexpr(body, target, is_assertion, new_bound_vars)
+                    return f"(let [{bind_str}] {body_code})"
+                else:
+                    bind_str = " ".join(bind_pairs)
+                    body_code = compile_sexpr(body, target, is_assertion, new_bound_vars)
+                    return f"(let ({bind_str}) {body_code})"
 
             elif first in ("for-all", "exists"):
                 type_name = compile_sexpr(sexpr[1], target, False, bound_vars)
                 body = sexpr[2]
                 body_code = compile_sexpr(body, target, is_assertion, bound_vars)
-                return f"({first} {type_name} (lambda (_) {body_code}))"
+                lambda_sym = "fn" if is_clj else "lambda"
+                lambda_args = "[_]" if is_clj else "(_)"
+                return f"({first} {type_name} ({lambda_sym} {lambda_args} {body_code}))"
 
             elif first in ("gives", "donne"):
                 giver = compile_sexpr(sexpr[1], target, False, bound_vars)
@@ -409,12 +505,316 @@ def compile_sexpr(sexpr: SExpr, target: str = "common-lisp", is_assertion: bool 
 
     return "()"
 
+def compile_sql_expr(sexpr: SExpr, is_assertion: bool = False) -> str:
+    import json
+    if isinstance(sexpr, str):
+        return f"'{sexpr}'"
+    if not isinstance(sexpr, list) or len(sexpr) == 0:
+        return ""
+        
+    first = sexpr[0]
+    if first in ("assert", "tell"):
+        return compile_sql_expr(sexpr[1], is_assertion=True)
+        
+    if first == "and":
+        if is_assertion:
+            return "\n".join(compile_sql_expr(x, is_assertion=True) for x in sexpr[1:])
+        else:
+            select_vars = []
+            tables = []
+            where_clauses = []
+            var_sources = {}
+            
+            for idx, conj in enumerate(sexpr[1:]):
+                if not isinstance(conj, list) or len(conj) == 0:
+                    continue
+                pred = conj[0]
+                alias = f"t{idx}"
+                tables.append(f"{pred} {alias}")
+                
+                args = conj[1:]
+                for a_idx, arg in enumerate(args):
+                    col_name = "subject" if a_idx == 0 else ("object" if a_idx == 1 else f"arg{a_idx}")
+                    if isinstance(arg, str) and arg.startswith("?"):
+                        if arg not in select_vars:
+                            select_vars.append(arg)
+                        if arg in var_sources:
+                            prev_alias, prev_col = var_sources[arg]
+                            where_clauses.append(f"{alias}.{col_name} = {prev_alias}.{prev_col}")
+                        else:
+                            var_sources[arg] = (alias, col_name)
+                    else:
+                        flat_val = simplify_argument(arg)
+                        where_clauses.append(f"{alias}.{col_name} = '{flat_val}'")
+            
+            if select_vars:
+                sel_cols = ", ".join(f"{var_sources[v][0]}.{var_sources[v][1]} AS {v[1:]}" for v in select_vars)
+            else:
+                sel_cols = "1"
+            
+            sql = f"SELECT {sel_cols} FROM {', '.join(tables)}"
+            if where_clauses:
+                sql += f" WHERE {' AND '.join(where_clauses)}"
+            return sql + ";"
+            
+    if is_assertion:
+        args = [simplify_argument(x) for x in sexpr[1:]]
+        if len(args) == 1:
+            return f"INSERT INTO {first} (subject) VALUES ('{args[0]}');"
+        elif len(args) == 2:
+            return f"INSERT INTO {first} (subject, object) VALUES ('{args[0]}', '{args[1]}');"
+        else:
+            cols = ["subject", "object"] + [f"arg{i}" for i in range(2, len(args))]
+            vals = ", ".join(f"'{a}'" for a in args)
+            return f"INSERT INTO {first} ({', '.join(cols)}) VALUES ({vals});"
+    else:
+        args = sexpr[1:]
+        select_vars = []
+        where_clauses = []
+        for a_idx, arg in enumerate(args):
+            col_name = "subject" if a_idx == 0 else ("object" if a_idx == 1 else f"arg{a_idx}")
+            if isinstance(arg, str) and arg.startswith("?"):
+                select_vars.append((col_name, arg[1:]))
+            else:
+                flat_val = simplify_argument(arg)
+                where_clauses.append(f"{col_name} = '{flat_val}'")
+                
+        if select_vars:
+            sel_cols = ", ".join(f"{col} AS {var_name}" for col, var_name in select_vars)
+        else:
+            sel_cols = "1"
+            
+        sql = f"SELECT {sel_cols} FROM {first}"
+        if where_clauses:
+            sql += f" WHERE {' AND '.join(where_clauses)}"
+        return sql + ";"
+
+def compile_cypher_expr(sexpr: SExpr, is_assertion: bool = False) -> str:
+    if isinstance(sexpr, str):
+        return sexpr
+    if not isinstance(sexpr, list) or len(sexpr) == 0:
+        return ""
+        
+    first = sexpr[0]
+    if first in ("assert", "tell"):
+        return compile_cypher_expr(sexpr[1], is_assertion=True)
+        
+    if first == "and":
+        if is_assertion:
+            return "\n".join(compile_cypher_expr(x, is_assertion=True) for x in sexpr[1:])
+        else:
+            match_patterns = []
+            where_clauses = []
+            select_vars = []
+            
+            c_idx = 0
+            for conj in sexpr[1:]:
+                if not isinstance(conj, list) or len(conj) == 0:
+                    continue
+                pred = conj[0]
+                args = conj[1:]
+                
+                if len(args) == 1:
+                    arg = args[0]
+                    if isinstance(arg, str) and arg.startswith("?"):
+                        var_name = arg[1:]
+                        if var_name not in select_vars:
+                            select_vars.append(var_name)
+                        match_patterns.append(f"({var_name}:Entity)")
+                        where_clauses.append(f"{var_name}.{pred} = true")
+                    else:
+                        flat_val = simplify_argument(arg)
+                        match_patterns.append(f"(n{c_idx}:Entity {{id: '{flat_val}'}})")
+                        where_clauses.append(f"n{c_idx}.{pred} = true")
+                        c_idx += 1
+                elif len(args) == 2:
+                    src, tgt = args[0], args[1]
+                    src_node = ""
+                    if isinstance(src, str) and src.startswith("?"):
+                        src_node = src[1:]
+                        if src_node not in select_vars:
+                            select_vars.append(src_node)
+                    else:
+                        flat_val = simplify_argument(src)
+                        src_node = f"n{c_idx}:Entity {{id: '{flat_val}'}}"
+                        c_idx += 1
+                        
+                    tgt_node = ""
+                    if isinstance(tgt, str) and tgt.startswith("?"):
+                        tgt_node = tgt[1:]
+                        if tgt_node not in select_vars:
+                            select_vars.append(tgt_node)
+                    else:
+                        flat_val = simplify_argument(tgt)
+                        tgt_node = f"n{c_idx}:Entity {{id: '{flat_val}'}}"
+                        c_idx += 1
+                        
+                    match_patterns.append(f"({src_node})-[:{pred.upper()}]->({tgt_node})")
+                c_idx += 1
+                
+            match_str = "MATCH " + ", ".join(match_patterns)
+            if where_clauses:
+                match_str += " WHERE " + " AND ".join(where_clauses)
+            if select_vars:
+                return match_str + " RETURN " + ", ".join(f"{v}.id AS {v}" for v in select_vars) + ";"
+            else:
+                return match_str + " RETURN 1;"
+
+    if is_assertion:
+        args = [simplify_argument(x) for x in sexpr[1:]]
+        if len(args) == 1:
+            return f"MERGE (n0:Entity {{id: '{args[0]}'}}) SET n0.{first} = true;"
+        elif len(args) == 2:
+            return f"MERGE (n0:Entity {{id: '{args[0]}'}}) MERGE (n1:Entity {{id: '{args[1]}'}}) CREATE (n0)-[:{first.upper()}]->(n1);"
+        else:
+            merges = [f"MERGE (n{i}:Entity {{id: '{a}'}})" for i, a in enumerate(args)]
+            create_rel = f"CREATE (r:Relation {{type: '{first}'}})"
+            edges = [f"CREATE (r)-[:ARG_{i}]->(n{i})" for i in range(len(args))]
+            return " ".join(merges) + " " + create_rel + " " + " ".join(edges) + ";"
+    else:
+        args = sexpr[1:]
+        select_vars = []
+        match_patterns = []
+        where_clauses = []
+        if len(args) == 1:
+            arg = args[0]
+            if isinstance(arg, str) and arg.startswith("?"):
+                var_name = arg[1:]
+                select_vars.append(var_name)
+                match_patterns.append(f"({var_name}:Entity)")
+                where_clauses.append(f"{var_name}.{first} = true")
+            else:
+                flat_val = simplify_argument(arg)
+                match_patterns.append(f"(n0:Entity {{id: '{flat_val}'}})")
+                where_clauses.append(f"n0.{first} = true")
+        elif len(args) == 2:
+            src, tgt = args[0], args[1]
+            src_node = ""
+            if isinstance(src, str) and src.startswith("?"):
+                src_node = src[1:]
+                select_vars.append(src_node)
+            else:
+                flat_val = simplify_argument(src)
+                src_node = f"n0:Entity {{id: '{flat_val}'}}"
+                
+            tgt_node = ""
+            if isinstance(tgt, str) and tgt.startswith("?"):
+                tgt_node = tgt[1:]
+                select_vars.append(tgt_node)
+            else:
+                flat_val = simplify_argument(tgt)
+                tgt_node = f"n1:Entity {{id: '{flat_val}'}}"
+                
+            match_patterns.append(f"({src_node})-[:{first.upper()}]->({tgt_node})")
+            
+        match_str = "MATCH " + ", ".join(match_patterns)
+        if where_clauses:
+            match_str += " WHERE " + " AND ".join(where_clauses)
+        if select_vars:
+            return match_str + " RETURN " + ", ".join(f"{v}.id AS {v}" for v in select_vars) + ";"
+        else:
+            return match_str + " RETURN 1;"
+
+def compile_mongodb_expr(sexpr: SExpr, is_assertion: bool = False) -> str:
+    import json
+    if isinstance(sexpr, str):
+        return f'"{sexpr}"'
+    if not isinstance(sexpr, list) or len(sexpr) == 0:
+        return ""
+        
+    first = sexpr[0]
+    if first in ("assert", "tell"):
+        return compile_mongodb_expr(sexpr[1], is_assertion=True)
+        
+    if first == "and":
+        if is_assertion:
+            return "\n".join(compile_mongodb_expr(x, is_assertion=True) for x in sexpr[1:])
+        else:
+            match_stages = []
+            project_vars = {}
+            lookup_stages = []
+            
+            for idx, conj in enumerate(sexpr[1:]):
+                if not isinstance(conj, list) or len(conj) == 0:
+                    continue
+                pred = conj[0]
+                args = conj[1:]
+                
+                if idx == 0:
+                    source_coll = pred
+                    match_doc = {}
+                    for a_idx, arg in enumerate(args):
+                        col = "subject" if a_idx == 0 else ("object" if a_idx == 1 else f"arg{a_idx}")
+                        if isinstance(arg, str) and arg.startswith("?"):
+                            project_vars[arg[1:]] = f"${col}"
+                        else:
+                            match_doc[col] = simplify_argument(arg)
+                    if match_doc:
+                        match_stages.append(f"{{ $match: {json.dumps(match_doc)} }}")
+                else:
+                    lookup_local = "subject"
+                    lookup_foreign = "subject"
+                    
+                    for a_idx, arg in enumerate(args):
+                        col = "subject" if a_idx == 0 else ("object" if a_idx == 1 else f"arg{a_idx}")
+                        if isinstance(arg, str) and arg.startswith("?"):
+                            var_name = arg[1:]
+                            if var_name in project_vars:
+                                for pk, pv in project_vars.items():
+                                    if pk == var_name:
+                                        lookup_local = pv[1:]
+                                        break
+                                lookup_foreign = col
+                            else:
+                                project_vars[var_name] = f"$joined_{idx}.{col}"
+                                
+                    lookup = {
+                        "from": pred,
+                        "localField": lookup_local,
+                        "foreignField": lookup_foreign,
+                        "as": f"joined_{idx}"
+                    }
+                    lookup_stages.append(f"{{ $lookup: {json.dumps(lookup)} }}")
+                    lookup_stages.append(f"{{ $match: {{ 'joined_{idx}.0': {{ $exists: true }} }} }}")
+            
+            project = {k: v for k, v in project_vars.items()}
+            project["_id"] = 0
+            stages = match_stages + lookup_stages + [f"{{ $project: {json.dumps(project)} }}"]
+            return f"db.{source_coll}.aggregate([\n  " + ",\n  ".join(stages) + "\n]);"
+
+    if is_assertion:
+        args = [simplify_argument(x) for x in sexpr[1:]]
+        doc = {}
+        if len(args) == 1:
+            doc["subject"] = args[0]
+        elif len(args) == 2:
+            doc["subject"] = args[0]
+            doc["object"] = args[1]
+        else:
+            doc["subject"] = args[0]
+            doc["object"] = args[1]
+            for i, a in enumerate(args[2:]):
+                doc[f"arg{i+2}"] = a
+        return f"db.{first}.insertOne({json.dumps(doc)});"
+    else:
+        args = sexpr[1:]
+        match_doc = {}
+        project_doc = {"_id": 0}
+        for a_idx, arg in enumerate(args):
+            col = "subject" if a_idx == 0 else ("object" if a_idx == 1 else f"arg{a_idx}")
+            if isinstance(arg, str) and arg.startswith("?"):
+                project_doc[arg[1:]] = f"${col}"
+            else:
+                match_doc[col] = simplify_argument(arg)
+        
+        match_str = json.dumps(match_doc)
+        project_str = json.dumps(project_doc)
+        return f"db.{first}.find({match_str}, {project_str});"
+
 def compile_program(sentences: List[Union[str, SExpr]], target: str = "common-lisp") -> str:
     """
-    Compiles a sequence of EngLISP S-expressions into a fully executable Common Lisp or Scheme program.
+    Compiles a sequence of EngLISP S-expressions into target dialect query code.
     """
-    is_cl = target.lower() in ("common-lisp", "cl")
-    
     parsed_sentences = []
     for s in sentences:
         if isinstance(s, str):
@@ -422,18 +822,47 @@ def compile_program(sentences: List[Union[str, SExpr]], target: str = "common-li
         else:
             parsed_sentences.append(s)
 
-    # Collect all custom predicates from the parsed expressions
+    target_lower = target.lower()
+    if target_lower == "sql":
+        statements = []
+        statements.append("-- ============================================================================")
+        statements.append("-- SQL Schema & Data Export generated from EngLISP")
+        statements.append("-- ============================================================================\n")
+        for s in parsed_sentences:
+            statements.append(compile_sql_expr(s))
+        return "\n".join(statements)
+        
+    elif target_lower == "cypher":
+        statements = []
+        statements.append("// ============================================================================")
+        statements.append("// Neo4j Cypher Graph Queries generated from EngLISP")
+        statements.append("// ============================================================================\n")
+        for s in parsed_sentences:
+            statements.append(compile_cypher_expr(s))
+        return "\n".join(statements)
+        
+    elif target_lower == "mongodb":
+        statements = []
+        statements.append("// ============================================================================")
+        statements.append("// MongoDB Query Documents generated from EngLISP")
+        statements.append("// ============================================================================\n")
+        for s in parsed_sentences:
+            statements.append(compile_mongodb_expr(s))
+        return "\n".join(statements)
+
+    is_cl = target_lower in ("common-lisp", "cl")
+    is_clj = target_lower in ("clojure", "clj")
     custom_preds = set()
     for s in parsed_sentences:
         custom_preds.update(collect_custom_predicates(s))
 
     sorted_preds = sorted(list(custom_preds))
-
     code_lines = []
     
-    # Add boilerplate header
     if is_cl:
         code_lines.append(COMMON_LISP_BOILERPLATE)
+    elif is_clj:
+        code_lines.append(CLOJURE_BOILERPLATE)
     else:
         code_lines.append(SCHEME_BOILERPLATE)
 
@@ -445,6 +874,9 @@ def compile_program(sentences: List[Union[str, SExpr]], target: str = "common-li
         if is_cl:
             code_lines.append(f'(defun {pred} (&rest args)')
             code_lines.append(f'  (apply #\'query-fact "{pred}" args))')
+        elif is_clj:
+            code_lines.append(f'(defn {pred} [& args]')
+            code_lines.append(f'  (apply query-fact "{pred}" args))')
         else:
             code_lines.append(f'(define ({pred} . args)')
             code_lines.append(f'  (apply query-fact "{pred}" args))')

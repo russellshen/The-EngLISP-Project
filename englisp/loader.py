@@ -160,6 +160,23 @@ def load_primes(filename: str) -> Dict[str, List[Any]]:
     data = load_lson_file(filename)
     return {item[0]: item[1] for item in data}
 
+def load_morphology_rules(filename: str) -> Dict[str, Any]:
+    data = load_lson_file(filename)
+    rules = {}
+    for lang_entry in data:
+        lang = lang_entry[0]
+        lang_rules = {}
+        for rule_entry in lang_entry[1:]:
+            rule_name = rule_entry[0]
+            if rule_name == "plural_suffixes":
+                lang_rules["plural_suffixes"] = tuple(rule_entry[1])
+            elif rule_name == "suffix_tags":
+                lang_rules["suffix_tags"] = {item[0]: item[1] for item in rule_entry[1:]}
+            elif rule_name == "base_rules":
+                lang_rules["base_rules"] = [(item[0], item[1]) for item in rule_entry[1:]]
+        rules[lang] = lang_rules
+    return rules
+
 def flatten_list(lst: Any) -> List[str]:
     if isinstance(lst, str):
         return [lst]
@@ -377,6 +394,7 @@ CONCEPTUAL_PRIMES = load_primes("conceptual_primes.lson")
 ORIGINAL_SYNSETS = load_set("original_synsets.lson")
 ORIGINAL_EN_WORDS = load_set("original_en_words.lson")
 ORIGINAL_FR_WORDS = load_set("original_fr_words.lson")
+MORPHOLOGY_RULES = load_morphology_rules("morphology_rules.lson")
 
 
 

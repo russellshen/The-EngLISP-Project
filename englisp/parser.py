@@ -22,8 +22,13 @@ from typing import List, Optional, Tuple, Any
 from englisp.xbar import XBarNode
 from englisp.loader import (
     LEXICON, FRENCH_LEXICON, GRAMMAR, FRENCH_GRAMMAR, ENGLISH_CONTRACTIONS,
-    ORIGINAL_EN_WORDS, ORIGINAL_FR_WORDS, FRENCH_GENDER
+    ORIGINAL_EN_WORDS, ORIGINAL_FR_WORDS, FRENCH_GENDER, MORPHOLOGY_RULES
 )
+
+class EngLISPParseError(ValueError):
+    def __init__(self, message: str, diagnostics: dict):
+        super().__init__(message)
+        self.diagnostics = diagnostics
 
 PRONOUN_LEXICON = {
     # English Subject Pronouns
@@ -96,12 +101,12 @@ def correct_word(word: str, lang: str = "en") -> str:
         return word
         
     # Plural check bypass
-    if lang == "en" and w_lower.endswith("s"):
-        if w_lower[:-1] in lex or (w_lower.endswith("es") and w_lower[:-2] in lex):
-            return word
-    elif lang == "fr" and w_lower.endswith(("s", "x")):
-        if w_lower[:-1] in lex:
-            return word
+    plural_suffixes = MORPHOLOGY_RULES.get(lang, {}).get("plural_suffixes", ())
+    for suffix in plural_suffixes:
+        if w_lower.endswith(suffix):
+            base = w_lower[:-len(suffix)]
+            if base in lex:
+                return word
     
     # We only correct alphabetic words of length >= 2
     if len(word) < 2 or not word.replace("-", "").replace("'", "").isalpha():
@@ -141,6 +146,7 @@ def correct_word(word: str, lang: str = "en") -> str:
 def tag_tokens(tokens: List[str], lang: str = "en") -> List[Tuple[str, str]]:
     """Tags tokens with POS tags using lexicon, context, and language-specific heuristics."""
     lex = FRENCH_LEXICON if lang == "fr" else LEXICON
+    plural_suffixes = MORPHOLOGY_RULES.get(lang, {}).get("plural_suffixes", ())
     tagged = []
     for idx, token in enumerate(tokens):
         t_lower = token.lower()
@@ -180,34 +186,25 @@ def tag_tokens(tokens: List[str], lang: str = "en") -> List[Tuple[str, str]]:
             tagged.append((token, "V"))
         elif token in lex:
             tagged.append((token, lex[token]))
-        elif lang == "en" and t_lower.endswith("s") and (
-            (t_lower[:-1] in lex and lex[t_lower[:-1]] == "N") or
-            (t_lower.endswith("es") and t_lower[:-2] in lex and lex[t_lower[:-2]] == "N")
-        ):
-            tagged.append((token, "N"))
-        elif lang == "fr" and t_lower.endswith(("s", "x")) and (
-            t_lower[:-1] in lex and lex[t_lower[:-1]] == "N"
+        elif t_lower.endswith(plural_suffixes) and any(
+            t_lower[:-len(sfx)] in lex and lex[t_lower[:-len(sfx)]] == "N"
+            for sfx in plural_suffixes if t_lower.endswith(sfx)
         ):
             tagged.append((token, "N"))
         elif idx > 0 and tagged[idx - 1][1] == "I":
             # Contextual: word after helper modal is a Verb
             tagged.append((token, "V"))
-        elif lang == "fr":
-            if token.endswith("ment"):
-                tagged.append((token, "Adv"))
-            elif token.endswith("er") or token.endswith("é") or token.endswith("ez") or token.endswith("re") or token.endswith("ir") or token.endswith("ait") or token.endswith("ais") or token.endswith("aient"):
-                tagged.append((token, "V"))
-            elif token.endswith("al") or token.endswith("if") or token.endswith("eux") or token.endswith("ique"):
-                tagged.append((token, "Adj"))
-            else:
-                tagged.append((token, "N"))
         else:
-            if token.endswith("ly"):
-                tagged.append((token, "Adv"))
-            elif token.endswith("ed") or token.endswith("es") or token.endswith("ing") or token.endswith("s") and len(token) > 4:
-                tagged.append((token, "V"))
-            elif token.endswith("al") or token.endswith("ive") or token.endswith("ous"):
-                tagged.append((token, "Adj"))
+            suffix_tags = MORPHOLOGY_RULES.get(lang, {}).get("suffix_tags", {})
+            matched_tag = None
+            for suffix, tag in suffix_tags.items():
+                if lang == "en" and suffix == "s" and len(token) <= 4:
+                    continue
+                if token.endswith(suffix):
+                    matched_tag = tag
+                    break
+            if matched_tag:
+                tagged.append((token, matched_tag))
             else:
                 tagged.append((token, "N"))
     return tagged
@@ -465,7 +462,13 @@ def _run_earley(tagged_tokens: List[Tuple[str, str]], root_cat: str, grammar_rul
         if state.lhs == root_cat and state.start == 0 and state.is_complete():
             tree = build_xbar_node(state.lhs, state.children)
             parses.append(tree)
-    return parses
+            
+    furthest_scanned_index = 0
+    for j in range(N + 1):
+        if len(chart_lists[j]) > 0:
+            furthest_scanned_index = j
+            
+    return parses, furthest_scanned_index
 
 class EntityCandidate:
     __slots__ = ("label", "synset_id", "gender", "number", "salience")
@@ -608,26 +611,69 @@ def parse(text: str, lang: Optional[str] = None) -> XBarNode:
     
     for sentence in sentences:
         tokens = clean_and_tokenize(sentence)
-        corrected_tokens = [correct_word(t, lang) for t in tokens]
+        corrected_tokens = []
+        spelling_corrections = []
+        unknown_words = []
+        
+        lex = FRENCH_LEXICON if lang == "fr" else LEXICON
+        plural_suffixes = MORPHOLOGY_RULES.get(lang, {}).get("plural_suffixes", ())
+        
+        for t in tokens:
+            corr = correct_word(t, lang)
+            corrected_tokens.append(corr)
+            if corr.lower() != t.lower():
+                spelling_corrections.append({"original": t, "corrected": corr})
+            
+            w_lower = corr.lower()
+            is_known = (w_lower in lex) or (w_lower in PRONOUN_LEXICON) or (w_lower == "_") or (w_lower.startswith("[") and w_lower.endswith("]")) or w_lower.isdigit()
+            if not is_known:
+                for suffix in plural_suffixes:
+                    if w_lower.endswith(suffix):
+                        base = w_lower[:-len(suffix)]
+                        if base in lex:
+                            is_known = True
+                            break
+            if not is_known:
+                unknown_words.append(t)
+                
         tagged_tokens = tag_tokens(corrected_tokens, lang)
         grammar_rules = FRENCH_GRAMMAR if lang == "fr" else GRAMMAR
         
         # 1. Try parsing as a full sentence (IP)
-        parses = _run_earley(tagged_tokens, "IP", grammar_rules)
+        parses, furthest_ip = _run_earley(tagged_tokens, "IP", grammar_rules)
         best_parse = None
+        furthest_idx = furthest_ip
+        
         if parses:
             best_parse = max(parses, key=score_tree)
         else:
             # 2. Fallback to sub-phrases: NP, VP, PP
             for fallback_cat in ("NP", "VP", "PP"):
-                parses = _run_earley(tagged_tokens, fallback_cat, grammar_rules)
+                parses, furthest_fallback = _run_earley(tagged_tokens, fallback_cat, grammar_rules)
+                if furthest_fallback > furthest_idx:
+                    furthest_idx = furthest_fallback
                 if parses:
                     best_parse = max(parses, key=score_tree)
                     best_parse = XBarNode(category="FRAG", role="phrase", children=[clone_with_role(best_parse, "complement")])
                     break
                     
         if best_parse is None:
-            raise ValueError(f"Failed to parse sentence or fragment: '{sentence}' into X-bar structure.")
+            # Construct granular diagnostics payload
+            failure_reason = f"Parser blocked at token '{tagged_tokens[furthest_idx][0]}' at position {furthest_idx}" if furthest_idx < len(tagged_tokens) else "Parser reached end of input but could not complete structure"
+            diagnostics = {
+                "sentence": sentence,
+                "tokens": tokens,
+                "corrected_tokens": corrected_tokens,
+                "spelling_corrections": spelling_corrections,
+                "unknown_words": unknown_words,
+                "furthest_token_index": furthest_idx,
+                "blocked_token": tagged_tokens[furthest_idx][0] if furthest_idx < len(tagged_tokens) else None,
+                "failure_reason": failure_reason
+            }
+            raise EngLISPParseError(
+                f"Failed to parse sentence or fragment: '{sentence}' into X-bar structure. {failure_reason}",
+                diagnostics
+            )
             
         resolve_pronouns_in_tree(best_parse, context, lang)
         parsed_trees.append(best_parse)

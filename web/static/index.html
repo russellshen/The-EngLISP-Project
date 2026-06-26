@@ -24,6 +24,13 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@300;400;500;600;700;800&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+    <!-- CodeMirror Editor CSS & JS -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/codemirror.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/theme/dracula.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/codemirror.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/mode/commonlisp/commonlisp.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/addon/edit/closebrackets.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/addon/edit/matchbrackets.min.js"></script>
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -84,13 +91,18 @@
                 </div>
                 <div class="card-body">
                     <p class="card-desc">Ambiguous, redundant, and stylistically diverse language. The starting point and generation target.</p>
-                    <div class="lang-selector-row">
-                        <span class="lang-label">Language Mode:</span>
-                        <select id="select-lang" class="lang-select">
-                            <option value="auto" selected>Auto-detect</option>
-                            <option value="en">English</option>
-                            <option value="fr">French</option>
-                        </select>
+                    <div class="lang-selector-row" style="display: flex; align-items: center; justify-content: space-between;">
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <span class="lang-label">Language Mode:</span>
+                            <select id="select-lang" class="lang-select">
+                                <option value="auto" selected>Auto-detect</option>
+                                <option value="en">English</option>
+                                <option value="fr">French</option>
+                            </select>
+                        </div>
+                        <button id="btn-voice-input" class="voice-btn" title="Voice Input" style="background: rgba(255, 255, 255, 0.05); border: 1px solid var(--glass-border); border-radius: 50%; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--text-light); transition: all 0.3s ease;">
+                            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 18px; height: 18px; margin: 0;"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v1a7 7 0 0 1-14 0v-1"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
+                        </button>
                     </div>
                     <textarea 
                         id="input-nl-text" 
@@ -135,11 +147,7 @@
                 </div>
                 <div class="card-body">
                     <p class="card-desc">Rotated Lisp S-expression putting semantic heads/verbs first inside functional parenthesis.</p>
-                    <textarea 
-                        id="input-englisp-text" 
-                        class="code-input text-input" 
-                        placeholder="Waiting for input..."
-                    ></textarea>
+                    <div id="input-englisp-container" class="editor-container code-input text-input"></div>
                     <div class="button-row">
                         <button id="btn-gen-englisp" class="action-btn secondary-btn">
                             <svg class="btn-icon rev-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
@@ -157,11 +165,7 @@
                 </div>
                 <div class="card-body">
                     <p class="card-desc">Shortest feasible representation. Redundancy (determiners, logical negatives) compressed.</p>
-                    <textarea 
-                        id="input-minimalist-text" 
-                        class="code-input text-input" 
-                        placeholder="Waiting for input..."
-                    ></textarea>
+                    <div id="input-minimalist-container" class="editor-container code-input text-input"></div>
                     <div class="button-row">
                         <button id="btn-gen-minimalist" class="action-btn accent-btn">
                             <svg class="btn-icon rev-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
@@ -190,9 +194,14 @@
                                 <li class="empty-state">No facts in the database. Use the console to populate.</li>
                             </ul>
                         </div>
-                        <button id="btn-reset-world" class="action-btn secondary-btn">
-                            <span>Reset Database</span>
-                        </button>
+                        <div style="display: flex; gap: 10px; margin-top: 1rem;">
+                            <button id="btn-reset-world" class="action-btn secondary-btn" style="margin-top: 0; flex: 1;">
+                                <span>Reset Database</span>
+                            </button>
+                            <button id="btn-export-rdf" class="action-btn primary-btn" style="margin-top: 0; flex: 1;">
+                                <span>Export RDF/Turtle</span>
+                            </button>
+                        </div>
                     </div>
                 </div>
 
@@ -218,9 +227,73 @@
                 </div>
         </section>
 
+        <!-- Interactive Agent Sandbox -->
+        <section class="sandbox-section">
+            <h2 class="section-title">Interactive Multi-Agent Sandbox</h2>
+            <div class="card sandbox-card" style="margin-top: 1rem;">
+                <div class="card-header">
+                    <div class="stage-badge">Sandbox</div>
+                    <h3 class="card-title">Agent Communication Node Grid</h3>
+                </div>
+                <div class="card-body">
+                    <p class="card-desc">Spawn autonomous linguistic agents that communicate in real-time by asserting observations and querying the World State.</p>
+                    
+                    <!-- Visual Agent Nodes -->
+                    <div class="agent-nodes-grid">
+                        <div class="agent-node" id="node-alice">
+                            <div class="node-indicator"></div>
+                            <div class="node-avatar" style="background: rgba(139, 92, 246, 0.2); border-color: var(--accent-violet);">A</div>
+                            <div class="node-info">
+                                <span class="node-name">Alice (Observer)</span>
+                                <span class="node-status">Idle</span>
+                            </div>
+                        </div>
+                        <div class="agent-node" id="node-bob">
+                            <div class="node-indicator"></div>
+                            <div class="node-avatar" style="background: rgba(6, 182, 212, 0.2); border-color: var(--accent-cyan);">B</div>
+                            <div class="node-info">
+                                <span class="node-name">Bob (Reasoner)</span>
+                                <span class="node-status">Idle</span>
+                            </div>
+                        </div>
+                        <div class="agent-node" id="node-charlie">
+                            <div class="node-indicator"></div>
+                            <div class="node-avatar" style="background: rgba(16, 185, 129, 0.2); border-color: var(--accent-green);">C</div>
+                            <div class="node-info">
+                                <span class="node-name">Charlie (Inferrer)</span>
+                                <span class="node-status">Idle</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Simulation Controls -->
+                    <div class="sandbox-controls">
+                        <button id="btn-toggle-sim" class="action-btn primary-btn" style="width: auto;">
+                            <span>Start Simulation</span>
+                        </button>
+                        <div class="speed-control">
+                            <span class="lang-label">Interval:</span>
+                            <input type="range" id="sim-speed" min="1000" max="5000" step="500" value="2500">
+                            <span id="speed-val" class="lang-label">2.5s</span>
+                        </div>
+                        <button id="btn-clear-agent-logs" class="action-btn secondary-btn" style="width: auto;">
+                            <span>Clear Logs</span>
+                        </button>
+                    </div>
+
+                    <!-- Agent Log terminal -->
+                    <div class="console-wrapper" style="margin-top: 1rem;">
+                        <div id="agent-logs" class="console-log" style="min-height: 180px; max-height: 250px;">
+                            <div class="log-entry system-msg">Simulation observer offline. Click "Start Simulation" to launch agents.</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
         <!-- Native Lisp/Scheme Compiler Section -->
         <section class="compiler-section">
-            <h2 class="section-title">Native Lisp & Scheme Compilation</h2>
+            <h2 class="section-title">Query & Code Compilation targets</h2>
             <div class="card compiler-card" style="margin-top: 1rem;">
                 <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
                     <div style="display: flex; align-items: center; gap: 10px;">
@@ -230,6 +303,10 @@
                     <div class="xbar-tabs" style="border: none; margin: 0; padding: 0;">
                         <button class="tab-btn active" id="compiler-tab-cl">Common Lisp</button>
                         <button class="tab-btn" id="compiler-tab-scheme">Scheme</button>
+                        <button class="tab-btn" id="compiler-tab-clojure">Clojure</button>
+                        <button class="tab-btn" id="compiler-tab-sql">SQL</button>
+                        <button class="tab-btn" id="compiler-tab-cypher">Cypher</button>
+                        <button class="tab-btn" id="compiler-tab-mongodb">MongoDB</button>
                     </div>
                 </div>
                 <div class="card-body">

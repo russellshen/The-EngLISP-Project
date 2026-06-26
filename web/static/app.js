@@ -22,10 +22,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const xbarTreeText = document.getElementById('xbar-tree-text');
     const xbarVisualContainer = document.getElementById('xbar-visual-container');
     
-    const inputEnglisp = document.getElementById('input-englisp-text');
-    const btnGenEnglisp = document.getElementById('btn-gen-englisp');
+    // CodeMirror Editor Containers
+    const containerEnglisp = document.getElementById('input-englisp-container');
+    const containerMinimalist = document.getElementById('input-minimalist-container');
     
-    const inputMinimalist = document.getElementById('input-minimalist-text');
+    const btnGenEnglisp = document.getElementById('btn-gen-englisp');
     const btnGenMinimalist = document.getElementById('btn-gen-minimalist');
     
     // Tabs
@@ -35,10 +36,64 @@ document.addEventListener('DOMContentLoaded', () => {
     // Compiler Elements
     const compilerTabCl = document.getElementById('compiler-tab-cl');
     const compilerTabScheme = document.getElementById('compiler-tab-scheme');
+    const compilerTabClojure = document.getElementById('compiler-tab-clojure');
+    const compilerTabSql = document.getElementById('compiler-tab-sql');
+    const compilerTabCypher = document.getElementById('compiler-tab-cypher');
+    const compilerTabMongodb = document.getElementById('compiler-tab-mongodb');
     const compiledCodeOutput = document.getElementById('compiled-code-output');
     let currentCompilerTarget = 'common-lisp';
 
-    
+    // ==========================================
+    // INITIALIZE CODEMIRROR INSTANCES
+    // ==========================================
+    const editorEnglisp = CodeMirror(containerEnglisp, {
+        mode: 'commonlisp',
+        theme: 'dracula',
+        lineNumbers: false,
+        autoCloseBrackets: true,
+        matchBrackets: true,
+        value: '; Waiting for input...'
+    });
+
+    const editorMinimalist = CodeMirror(containerMinimalist, {
+        mode: 'commonlisp',
+        theme: 'dracula',
+        lineNumbers: false,
+        autoCloseBrackets: true,
+        matchBrackets: true,
+        value: '; Waiting for input...'
+    });
+
+    // Parenthesis Matching Real-time Validator
+    let toastTimeout = null;
+    function checkParentheses(editor, container) {
+        const val = editor.getValue();
+        let openCount = 0;
+        let closeCount = 0;
+        for (let char of val) {
+            if (char === '(') openCount++;
+            else if (char === ')') closeCount++;
+        }
+        if (openCount !== closeCount) {
+            container.classList.add('error-glow');
+            if (toastTimeout) clearTimeout(toastTimeout);
+            toastTimeout = setTimeout(() => {
+                showToast(`Parentheses mismatch! (${openCount} open, ${closeCount} closed)`, 'error');
+            }, 1200);
+        } else {
+            container.classList.remove('error-glow');
+        }
+    }
+
+    editorEnglisp.on('change', () => {
+        checkParentheses(editorEnglisp, containerEnglisp);
+        fetchCompiledCode();
+    });
+
+    editorMinimalist.on('change', () => {
+        checkParentheses(editorMinimalist, containerMinimalist);
+    });
+
     // Sample Buttons
     document.querySelectorAll('.sample-btn').forEach(btn => {
         btn.addEventListener('click', () => {
@@ -69,33 +124,150 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     btnGenEnglisp.addEventListener('click', () => {
-        triggerReversePipelineFromEngLISP(inputEnglisp.value);
+        triggerReversePipelineFromEngLISP(editorEnglisp.getValue());
     });
 
     btnGenMinimalist.addEventListener('click', () => {
-        triggerReversePipelineFromMinimalist(inputMinimalist.value);
+        triggerReversePipelineFromMinimalist(editorMinimalist.getValue());
     });
+
+    // Reset Active States on Compiler Tabs
+    function resetCompilerTabs() {
+        compilerTabCl.classList.remove('active');
+        compilerTabScheme.classList.remove('active');
+        if (compilerTabClojure) compilerTabClojure.classList.remove('active');
+        compilerTabSql.classList.remove('active');
+        compilerTabCypher.classList.remove('active');
+        compilerTabMongodb.classList.remove('active');
+    }
 
     // Compiler Tab Listeners
     compilerTabCl.addEventListener('click', () => {
+        resetCompilerTabs();
         compilerTabCl.classList.add('active');
-        compilerTabScheme.classList.remove('active');
         currentCompilerTarget = 'common-lisp';
         fetchCompiledCode();
     });
 
     compilerTabScheme.addEventListener('click', () => {
+        resetCompilerTabs();
         compilerTabScheme.classList.add('active');
-        compilerTabCl.classList.remove('active');
         currentCompilerTarget = 'scheme';
         fetchCompiledCode();
     });
 
-    inputEnglisp.addEventListener('input', fetchCompiledCode);
+    compilerTabSql.addEventListener('click', () => {
+        resetCompilerTabs();
+        compilerTabSql.classList.add('active');
+        currentCompilerTarget = 'sql';
+        fetchCompiledCode();
+    });
+
+    compilerTabCypher.addEventListener('click', () => {
+        resetCompilerTabs();
+        compilerTabCypher.classList.add('active');
+        currentCompilerTarget = 'cypher';
+        fetchCompiledCode();
+    });
+
+    compilerTabMongodb.addEventListener('click', () => {
+        resetCompilerTabs();
+        compilerTabMongodb.classList.add('active');
+        currentCompilerTarget = 'mongodb';
+        fetchCompiledCode();
+    });
+
+    if (compilerTabClojure) {
+        compilerTabClojure.addEventListener('click', () => {
+            resetCompilerTabs();
+            compilerTabClojure.classList.add('active');
+            currentCompilerTarget = 'clojure';
+            fetchCompiledCode();
+        });
+    }
+
+    // Voice Input Setup
+    const btnVoiceInput = document.getElementById('btn-voice-input');
+    let voiceRecognition = null;
+    let isRecording = false;
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (SpeechRecognition && btnVoiceInput) {
+        voiceRecognition = new SpeechRecognition();
+        voiceRecognition.continuous = false;
+        voiceRecognition.interimResults = false;
+
+        voiceRecognition.onstart = () => {
+            isRecording = true;
+            btnVoiceInput.classList.add('recording');
+        };
+
+        voiceRecognition.onend = () => {
+            isRecording = false;
+            btnVoiceInput.classList.remove('recording');
+        };
+
+        voiceRecognition.onerror = (e) => {
+            console.error('Speech recognition error:', e);
+            isRecording = false;
+            btnVoiceInput.classList.remove('recording');
+            showToast('Voice input failed or was blocked.', 'error');
+        };
+
+        voiceRecognition.onresult = (event) => {
+            const transcript = event.results[0][0].transcript;
+            if (transcript) {
+                inputNl.value = transcript;
+                appendConsoleLog(`Speech recognized: "${transcript}"`, 'system-msg');
+            }
+        };
+
+        btnVoiceInput.addEventListener('click', () => {
+            if (isRecording) {
+                voiceRecognition.stop();
+            } else {
+                const langMode = document.getElementById('select-lang').value;
+                if (langMode === 'fr') {
+                    voiceRecognition.lang = 'fr-FR';
+                } else {
+                    voiceRecognition.lang = 'en-US';
+                }
+                voiceRecognition.start();
+            }
+        });
+    } else if (btnVoiceInput) {
+        btnVoiceInput.style.display = 'none';
+    }
+
+    // RDF/Turtle Export
+    const btnExportRdf = document.getElementById('btn-export-rdf');
+    if (btnExportRdf) {
+        btnExportRdf.addEventListener('click', async () => {
+            try {
+                const response = await fetch('/api/world/export');
+                if (!response.ok) {
+                    throw new Error('Failed to export world state.');
+                }
+                const turtleText = await response.text();
+                
+                const blob = new Blob([turtleText], { type: 'text/turtle' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'world_state.ttl';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                showToast('RDF/Turtle exported successfully.', 'success');
+            } catch (err) {
+                console.error(err);
+                showToast('Failed to export RDF/Turtle database.', 'error');
+            }
+        });
+    }
 
     // Initial load
     triggerForwardPipeline(inputNl.value);
-
 
     // ==========================================
     // API CALLS
@@ -174,8 +346,8 @@ document.addEventListener('DOMContentLoaded', () => {
     function updateUIForward(pipeline) {
         inputNl.value = pipeline.stage1_nl;
         xbarTreeText.textContent = pipeline.stage2_xbar_text;
-        inputEnglisp.value = pipeline.stage3_englisp;
-        inputMinimalist.value = pipeline.stage4_minimalist;
+        editorEnglisp.setValue(pipeline.stage3_englisp);
+        editorMinimalist.setValue(pipeline.stage4_minimalist);
         
         if (pipeline.detected_lang) {
             document.getElementById('select-lang').value = pipeline.detected_lang;
@@ -191,8 +363,8 @@ document.addEventListener('DOMContentLoaded', () => {
             inputNl.value = pipeline.stage1_nl;
         }
         xbarTreeText.textContent = pipeline.stage2_xbar_text;
-        inputEnglisp.value = pipeline.stage3_englisp;
-        inputMinimalist.value = pipeline.stage4_minimalist;
+        editorEnglisp.setValue(pipeline.stage3_englisp);
+        editorMinimalist.setValue(pipeline.stage4_minimalist);
         
         if (pipeline.detected_lang) {
             document.getElementById('select-lang').value = pipeline.detected_lang;
@@ -204,8 +376,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     async function fetchCompiledCode() {
-        const expr = inputEnglisp.value.trim();
-        if (!expr) {
+        const expr = editorEnglisp.getValue().trim();
+        if (!expr || expr.startsWith(';')) {
             compiledCodeOutput.textContent = 'Waiting for S-expression...';
             return;
         }
@@ -225,7 +397,6 @@ document.addEventListener('DOMContentLoaded', () => {
             compiledCodeOutput.textContent = '; Error: Could not connect to compilation server.';
         }
     }
-
 
     function setLoadingState(isLoading) {
         if (isLoading) {
@@ -264,7 +435,6 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // Trigger reflow
         toast.offsetHeight;
-        
         toast.classList.add('show');
         
         setTimeout(() => {
@@ -280,37 +450,28 @@ document.addEventListener('DOMContentLoaded', () => {
         xbarTreeText.textContent = `Error: ${msg}`;
     }
 
-
     // ==========================================
     // DYNAMIC SVG TREE RENDERER
     // ==========================================
 
     function renderSVGTree(rootNode) {
-        // Clear SVG
         xbarSvg.innerHTML = '';
-        
         if (!rootNode) return;
 
-        // 1. Traverse tree to compute layout depth and calculate leaf positions
         let leavesCount = 0;
-        
         function assignCoordinates(node, depth) {
             node.depth = depth;
             if (!node.children || node.children.length === 0) {
-                // Leaf/terminal node
                 node.leafIndex = leavesCount;
                 leavesCount++;
                 return;
             }
-            
             node.children.forEach(child => {
                 assignCoordinates(child, depth + 1);
             });
         }
-        
         assignCoordinates(rootNode, 0);
 
-        // Grid parameters
         const width = xbarVisualContainer.clientWidth || 800;
         const height = 450;
         const topMargin = 40;
@@ -320,15 +481,12 @@ document.addEventListener('DOMContentLoaded', () => {
         const verticalSpacing = (height - topMargin - bottomMargin) / (getMaxDepth(rootNode) || 1);
         const horizontalSpacing = (width - sideMargin * 2) / Math.max(1, leavesCount - 1);
 
-        // 2. Set X positions for nodes
-        // Leaves: directly from leafIndex. Parents: average of children's X.
         function computeXPositions(node) {
             if (!node.children || node.children.length === 0) {
                 node.x = sideMargin + node.leafIndex * horizontalSpacing;
                 node.y = topMargin + node.depth * verticalSpacing;
                 return node.x;
             }
-            
             let sumX = 0;
             node.children.forEach(child => {
                 sumX += computeXPositions(child);
@@ -337,33 +495,24 @@ document.addEventListener('DOMContentLoaded', () => {
             node.y = topMargin + node.depth * verticalSpacing;
             return node.x;
         }
-        
         computeXPositions(rootNode);
 
-        // Make sure SVG viewBox matches container size
         xbarSvg.setAttribute('viewBox', `0 0 ${width} ${height}`);
 
-        // 3. Draw connection links
         function drawLinks(node) {
             if (!node.children) return;
             node.children.forEach(child => {
-                // Draw curve using cubic bezier path or simple line
                 const link = document.createElementNS('http://www.w3.org/2000/svg', 'path');
                 const midY = (node.y + child.y) / 2;
-                
-                // Beautiful smooth curves
                 const pathData = `M ${node.x} ${node.y} C ${node.x} ${midY}, ${child.x} ${midY}, ${child.x} ${child.y}`;
-                
                 link.setAttribute('d', pathData);
                 link.setAttribute('class', 'tree-link');
                 xbarSvg.appendChild(link);
-                
                 drawLinks(child);
             });
         }
         drawLinks(rootNode);
 
-        // 4. Draw nodes (so they stack above links)
         function drawNodes(node) {
             const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
             g.setAttribute('class', 'tree-node');
@@ -373,7 +522,6 @@ document.addEventListener('DOMContentLoaded', () => {
             circle.setAttribute('cy', node.y);
             circle.setAttribute('r', 16);
             
-            // Apply category-specific class for colors
             let categoryClass = 'phrase-node';
             if (node.category.endsWith("'")) {
                 categoryClass = 'bar-node';
@@ -382,7 +530,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             circle.setAttribute('class', `tree-node-circle ${categoryClass}`);
             
-            // Label text in circle
             const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
             text.setAttribute('x', node.x);
             text.setAttribute('y', node.y + 4);
@@ -392,7 +539,6 @@ document.addEventListener('DOMContentLoaded', () => {
             g.appendChild(circle);
             g.appendChild(text);
 
-            // If it's a leaf node with a terminal label, display it below the node
             if (node.label !== undefined && node.label !== null) {
                 const leafText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
                 leafText.setAttribute('x', node.x);
@@ -400,7 +546,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 leafText.setAttribute('class', 'tree-leaf-text');
                 leafText.textContent = node.label;
                 
-                // Add a dashed vertical guide line to terminal word
                 const guide = document.createElementNS('http://www.w3.org/2000/svg', 'line');
                 guide.setAttribute('x1', node.x);
                 guide.setAttribute('y1', node.y + 16);
@@ -442,7 +587,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const consoleInput = document.getElementById('console-input');
     const btnSubmitConsole = document.getElementById('btn-submit-console');
 
-    // Fetch and display world state
     async function fetchWorldState() {
         try {
             const response = await fetch('/api/world');
@@ -458,13 +602,12 @@ document.addEventListener('DOMContentLoaded', () => {
     function renderWorldFacts(facts) {
         worldFactsList.innerHTML = '';
         if (facts.length === 0) {
-            worldFactsList.innerHTML = '<li class="empty-state">No facts in the database. Use the console to populate.</li>';
+            worldFactsList.innerHTML = '<li class="empty-state">No facts in the database. Use the console or sandbox to populate.</li>';
             return;
         }
 
         facts.forEach(fact => {
             const li = document.createElement('li');
-            // Format fact as: predicate(arg1, arg2, ...)
             const pred = fact[0];
             const args = fact.slice(1);
             li.textContent = `${pred}(${args.join(', ')})`;
@@ -472,12 +615,10 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Submit interpreter console command
     async function executeConsoleCommand(cmd) {
         cmd = cmd.trim();
         if (!cmd) return;
 
-        // Log user command
         appendConsoleLog(cmd, 'user-cmd');
         consoleInput.value = '';
 
@@ -517,7 +658,6 @@ document.addEventListener('DOMContentLoaded', () => {
             appendConsoleLog('Could not connect to the interpreter endpoint.', 'error-msg');
         }
 
-        // Refresh world state
         await fetchWorldState();
     }
 
@@ -526,11 +666,9 @@ document.addEventListener('DOMContentLoaded', () => {
         div.className = `log-entry ${className}`;
         div.innerHTML = text;
         consoleLog.appendChild(div);
-        // Scroll to bottom
         consoleLog.scrollTop = consoleLog.scrollHeight;
     }
 
-    // Bind Console events
     btnSubmitConsole.addEventListener('click', () => {
         executeConsoleCommand(consoleInput.value);
     });
@@ -561,6 +699,197 @@ document.addEventListener('DOMContentLoaded', () => {
         await fetchWorldState();
     };
 
-    // Initial load of facts list
     fetchWorldState();
+
+    // ==========================================
+    // INTERACTIVE AGENT SANDBOX LOOP
+    // ==========================================
+    const btnToggleSim = document.getElementById('btn-toggle-sim');
+    const simSpeed = document.getElementById('sim-speed');
+    const speedVal = document.getElementById('speed-val');
+    const btnClearAgentLogs = document.getElementById('btn-clear-agent-logs');
+    const agentLogs = document.getElementById('agent-logs');
+    
+    const nodeAlice = document.getElementById('node-alice');
+    const nodeBob = document.getElementById('node-bob');
+    const nodeCharlie = document.getElementById('node-charlie');
+    
+    let simIntervalId = null;
+    let simStep = 0;
+    
+    const aliceObservations = [
+        "The dog chased the cat.",
+        "The fox is lazy.",
+        "The cat runs.",
+        "A student read a book.",
+        "Le chien aboyait.",
+        "Le chat court."
+    ];
+    
+    const bobQueries = [
+        "(chased ?who cat)",
+        "(lazy ?x)",
+        "(runs ?x)",
+        "(read ?who book)",
+        "(chased dog ?who)"
+    ];
+    
+    const charlieRules = [
+        "(=> (chased ?x ?y) (scared ?y))",
+        "(=> (lazy ?x) (sleeps ?x))"
+    ];
+
+    simSpeed.addEventListener('input', () => {
+        speedVal.textContent = `${(simSpeed.value / 1000).toFixed(1)}s`;
+        if (simIntervalId) {
+            stopSimulation();
+            startSimulation();
+        }
+    });
+
+    btnToggleSim.addEventListener('click', () => {
+        if (simIntervalId) {
+            stopSimulation();
+            btnToggleSim.querySelector('span').textContent = 'Start Simulation';
+            btnToggleSim.classList.remove('accent-btn');
+            btnToggleSim.classList.add('primary-btn');
+            appendAgentLog('Simulation stopped.', 'system-msg');
+        } else {
+            startSimulation();
+            btnToggleSim.querySelector('span').textContent = 'Stop Simulation';
+            btnToggleSim.classList.remove('primary-btn');
+            btnToggleSim.classList.add('accent-btn');
+            appendAgentLog('Simulation started.', 'system-msg');
+        }
+    });
+
+    btnClearAgentLogs.addEventListener('click', () => {
+        agentLogs.innerHTML = '<div class="log-entry system-msg">Agent logs cleared.</div>';
+    });
+
+    function appendAgentLog(msg, className) {
+        const div = document.createElement('div');
+        div.className = `log-entry ${className}`;
+        div.innerHTML = msg;
+        agentLogs.appendChild(div);
+        agentLogs.scrollTop = agentLogs.scrollHeight;
+    }
+
+    function startSimulation() {
+        const interval = parseInt(simSpeed.value);
+        simIntervalId = setInterval(runSimulationTick, interval);
+    }
+
+    function stopSimulation() {
+        if (simIntervalId) {
+            clearInterval(simIntervalId);
+            simIntervalId = null;
+        }
+        resetNodeAnimations();
+    }
+
+    function resetNodeAnimations() {
+        nodeAlice.className = 'agent-node';
+        nodeBob.className = 'agent-node';
+        nodeCharlie.className = 'agent-node';
+        nodeAlice.querySelector('.node-status').textContent = 'Idle';
+        nodeBob.querySelector('.node-status').textContent = 'Idle';
+        nodeCharlie.querySelector('.node-status').textContent = 'Idle';
+    }
+
+    async function runSimulationTick() {
+        resetNodeAnimations();
+        const phase = simStep % 3;
+        simStep++;
+        
+        if (phase === 0) {
+            nodeAlice.classList.add('active-pulse-alice');
+            nodeAlice.querySelector('.node-status').textContent = 'Observing & Asserting...';
+            
+            const randSentence = aliceObservations[Math.floor(Math.random() * aliceObservations.length)];
+            appendAgentLog(`Alice observing event: "${randSentence}"`, 'agent-alice');
+            
+            try {
+                const response = await fetch('/api/parse', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text: randSentence })
+                });
+                const data = await response.json();
+                if (response.ok && data.success) {
+                    const fact_str = data.pipeline.stage4_minimalist;
+                    appendAgentLog(`Alice parsed and asserted: <code>${fact_str}</code>`, 'agent-alice');
+                    fetchWorldState();
+                } else {
+                    appendAgentLog(`Alice failed to parse observation.`, 'agent-alice');
+                }
+            } catch (err) {
+                appendAgentLog(`Alice connection error.`, 'agent-alice');
+            }
+        } 
+        else if (phase === 1) {
+            nodeBob.classList.add('active-pulse-bob');
+            nodeBob.querySelector('.node-status').textContent = 'Querying World...';
+            
+            const randQuery = bobQueries[Math.floor(Math.random() * bobQueries.length)];
+            appendAgentLog(`Bob querying world: <code>${randQuery}</code>`, 'agent-bob');
+            
+            try {
+                const response = await fetch('/api/interpret', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ expr: randQuery })
+                });
+                const data = await response.json();
+                if (response.ok) {
+                    if (data.bindings && data.bindings.length > 0) {
+                        const bindList = data.bindings.map(b => JSON.stringify(b)).join(', ');
+                        appendAgentLog(`Bob found matches: <code>${bindList}</code>`, 'agent-bob');
+                    } else {
+                        appendAgentLog(`Bob found no matches.`, 'agent-bob');
+                    }
+                } else {
+                    appendAgentLog(`Bob query evaluation failed.`, 'agent-bob');
+                }
+            } catch (err) {
+                appendAgentLog(`Bob connection error.`, 'agent-bob');
+            }
+        } 
+        else {
+            nodeCharlie.classList.add('active-pulse-charlie');
+            nodeCharlie.querySelector('.node-status').textContent = 'Applying Inference Rules...';
+            
+            const randRule = charlieRules[Math.floor(Math.random() * charlieRules.length)];
+            appendAgentLog(`Charlie asserting logic rule: <code>${randRule}</code>`, 'agent-charlie');
+            
+            try {
+                const resRule = await fetch('/api/interpret', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ expr: randRule })
+                });
+                const ruleData = await resRule.json();
+                if (resRule.ok && ruleData.success) {
+                    appendAgentLog(`Charlie rule asserted successfully. Triggering inference...`, 'agent-charlie');
+                    const triggerQuery = randRule.includes("scared") ? "(scared ?who)" : "(sleeps ?who)";
+                    const resQuery = await fetch('/api/interpret', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ expr: triggerQuery })
+                    });
+                    const queryData = await resQuery.json();
+                    if (resQuery.ok && queryData.success && queryData.bindings.length > 0) {
+                        const bindings = queryData.bindings.map(b => JSON.stringify(b)).join(', ');
+                        appendAgentLog(`Charlie inferred: <code>${triggerQuery}</code> matches <code>${bindings}</code>`, 'agent-charlie');
+                    } else {
+                        appendAgentLog(`Charlie found no matches for inferred rule.`, 'agent-charlie');
+                    }
+                } else {
+                    appendAgentLog(`Charlie rule assertion failed.`, 'agent-charlie');
+                }
+            } catch (err) {
+                appendAgentLog(`Charlie connection error.`, 'agent-charlie');
+            }
+        }
+    }
 });

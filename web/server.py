@@ -33,11 +33,42 @@ from web import database
 
 from fastapi.middleware.cors import CORSMiddleware
 
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
+from fastapi.responses import JSONResponse
+
+def anonymous_only_limit_key(request: Request) -> Optional[str]:
+    x_api_key = request.headers.get("X-API-Key")
+    api_key = request.query_params.get("api_key")
+    if x_api_key or api_key:
+        return None
+    return get_remote_address(request)
+
+limiter = Limiter(key_func=anonymous_only_limit_key)
+
 app = FastAPI(
     title="EngLISP Bridge Server",
     description="A bidirectional bridge between natural language and computation with identity management.",
     version="1.1.0"
 )
+
+app.state.limiter = limiter
+
+def custom_rate_limit_handler(request: Request, exc: RateLimitExceeded) -> JSONResponse:
+    endpoint_path = request.url.path
+    if "/api/auth/" in endpoint_path:
+        detail = "Too many requests. Please try again later."
+    else:
+        detail = "Sandbox rate limit exceeded (Max 5 requests per minute without an account). Please register for a free account to get 100 queries/month."
+    return JSONResponse(
+        status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+        content={"detail": detail}
+    )
+
+app.add_exception_handler(RateLimitExceeded, custom_rate_limit_handler)
+app.add_middleware(SlowAPIMiddleware)
 
 app.add_middleware(
     CORSMiddleware,
@@ -67,24 +98,6 @@ world_model = WorldModel()
 def startup_event():
     database.db_init()
 
-# Anonymous sandbox IP-based rate limiter
-# Structure: { ip_address: [timestamp1, timestamp2, ...] }
-ANONYMOUS_REQUEST_TIMESTAMPS: Dict[str, List[float]] = {}
-
-def check_anonymous_rate_limit(ip: str) -> bool:
-    now = time.time()
-    if ip in ANONYMOUS_REQUEST_TIMESTAMPS:
-        # Keep only requests within the last 60 seconds
-        ANONYMOUS_REQUEST_TIMESTAMPS[ip] = [t for t in ANONYMOUS_REQUEST_TIMESTAMPS[ip] if now - t < 60]
-    else:
-        ANONYMOUS_REQUEST_TIMESTAMPS[ip] = []
-        
-    if len(ANONYMOUS_REQUEST_TIMESTAMPS[ip]) >= 5:
-        return False
-        
-    ANONYMOUS_REQUEST_TIMESTAMPS[ip].append(now)
-    return True
-
 # Authentication Dependency
 def get_auth_user(
     request: Request,
@@ -104,13 +117,6 @@ def get_auth_user(
         
     key = x_api_key or api_key
     if not key:
-        # Sandbox tier tracking
-        ip = request.client.host if request.client else "unknown"
-        if not check_anonymous_rate_limit(ip):
-            raise HTTPException(
-                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                detail="Sandbox rate limit exceeded (Max 5 requests per minute without an account). Please register for a free account to get 100 queries/month."
-            )
         CURRENT_USER_TIER.set("free")
         return None # Anonymous Sandbox user
         
@@ -190,13 +196,13 @@ class CompileRequest(BaseModel):
     expr: str = Field(
         ...,
         max_length=1000,
-        description="EngLISP S-expression to compile to Lisp/Scheme. Maximum 1000 characters.",
+        description="EngLISP S-expression to compile to target dialect. Maximum 1000 characters.",
         examples=["(chased (dog the) (cat the))"]
     )
     target: str = Field(
         "common-lisp",
-        description="Target compilation dialect ('common-lisp' or 'scheme').",
-        examples=["scheme"]
+        description="Target compilation dialect ('common-lisp', 'scheme', 'clojure', 'sql', 'cypher', or 'mongodb').",
+        examples=["sql"]
     )
 
 class AuthRequest(BaseModel):
@@ -223,7 +229,8 @@ class SubscribeRequest(BaseModel):
 # --- Authentication & User Endpoints ---
 
 @app.post("/api/auth/register")
-def api_register(req: AuthRequest):
+@limiter.limit("10/minute", key_func=get_remote_address)
+def api_register(req: AuthRequest, request: Request):
     email = req.email.strip()
     password = req.password
     
@@ -252,7 +259,8 @@ def api_register(req: AuthRequest):
     }
 
 @app.post("/api/auth/login")
-def api_login(req: AuthRequest):
+@limiter.limit("10/minute", key_func=get_remote_address)
+def api_login(req: AuthRequest, request: Request):
     email = req.email.strip()
     password = req.password
     
@@ -274,7 +282,8 @@ def api_login(req: AuthRequest):
     }
 
 @app.get("/api/auth/me")
-def api_me(user: Optional[dict] = Depends(get_auth_user)):
+@limiter.limit("10/minute", key_func=get_remote_address)
+def api_me(request: Request, user: Optional[dict] = Depends(get_auth_user)):
     if not user:
         return {
             "authenticated": False,
@@ -295,7 +304,8 @@ def api_me(user: Optional[dict] = Depends(get_auth_user)):
     }
 
 @app.post("/api/auth/subscribe")
-def api_subscribe(req: SubscribeRequest, user: Optional[dict] = Depends(get_auth_user)):
+@limiter.limit("10/minute", key_func=get_remote_address)
+def api_subscribe(req: SubscribeRequest, request: Request, user: Optional[dict] = Depends(get_auth_user)):
     if not user:
         raise HTTPException(status_code=401, detail="Authentication required to subscribe.")
     updated_user = database.subscribe_user(user["email"], req.duration_seconds)
@@ -313,7 +323,8 @@ def api_subscribe(req: SubscribeRequest, user: Optional[dict] = Depends(get_auth
 # --- Core EngLISP Pipeline API Endpoints ---
 
 @app.post("/api/parse")
-def api_parse(req: ParseRequest, user: Optional[dict] = Depends(get_auth_user)):
+@limiter.limit("5/minute")
+def api_parse(req: ParseRequest, request: Request, user: Optional[dict] = Depends(get_auth_user)):
     CURRENT_USER_TIER.set(user["tier"] if user else "free")
     try:
         text = req.text.strip()
@@ -360,11 +371,19 @@ def api_parse(req: ParseRequest, user: Optional[dict] = Depends(get_auth_user)):
                 "detected_lang": lang
             }
         }
+    except parser.EngLISPParseError as e:
+        return {
+            "success": False,
+            "error_type": "parse_diagnostics",
+            "message": str(e),
+            "diagnostics": e.diagnostics
+        }
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 @app.post("/api/generate-from-minimalist")
-def api_generate_from_minimalist(req: MinimaLISTRequest, user: Optional[dict] = Depends(get_auth_user)):
+@limiter.limit("5/minute")
+def api_generate_from_minimalist(req: MinimaLISTRequest, request: Request, user: Optional[dict] = Depends(get_auth_user)):
     CURRENT_USER_TIER.set(user["tier"] if user else "free")
     min_str = req.minimalist.strip()
     if not min_str:
@@ -372,7 +391,6 @@ def api_generate_from_minimalist(req: MinimaLISTRequest, user: Optional[dict] = 
     if not check_sexpr_depth(min_str):
         raise HTTPException(status_code=400, detail="S-expression nesting depth exceeds limit of 50.")
     try:
-
         lang = req.lang
         if not lang or lang == "auto":
             lang = "en"
@@ -404,7 +422,8 @@ def api_generate_from_minimalist(req: MinimaLISTRequest, user: Optional[dict] = 
         raise HTTPException(status_code=400, detail=str(e))
 
 @app.post("/api/generate-from-englisp")
-def api_generate_from_englisp(req: EngLISPRequest, user: Optional[dict] = Depends(get_auth_user)):
+@limiter.limit("5/minute")
+def api_generate_from_englisp(req: EngLISPRequest, request: Request, user: Optional[dict] = Depends(get_auth_user)):
     CURRENT_USER_TIER.set(user["tier"] if user else "free")
     el_str = req.englisp.strip()
     if not el_str:
@@ -412,7 +431,6 @@ def api_generate_from_englisp(req: EngLISPRequest, user: Optional[dict] = Depend
     if not check_sexpr_depth(el_str):
         raise HTTPException(status_code=400, detail="S-expression nesting depth exceeds limit of 50.")
     try:
-
         lang = req.lang
         if not lang or lang == "auto":
             lang = "en"
@@ -444,12 +462,56 @@ def api_generate_from_englisp(req: EngLISPRequest, user: Optional[dict] = Depend
         raise HTTPException(status_code=400, detail=str(e))
 
 @app.get("/api/world")
-def get_world(user: Optional[dict] = Depends(get_auth_user)):
+@limiter.limit("5/minute")
+def get_world(request: Request, user: Optional[dict] = Depends(get_auth_user)):
     # Simple state display does not decrement quota but checks general auth
     return {"facts": [list(f) for f in world_model.get_all_facts()]}
 
+@app.get("/api/world/export")
+@limiter.limit("5/minute")
+def export_world_rdf(request: Request, user: Optional[dict] = Depends(get_auth_user)):
+    from fastapi import Response
+    facts = world_model.get_all_facts()
+    
+    lines = []
+    lines.append("@prefix : <http://englisp.org/schema#> .")
+    lines.append("@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .")
+    lines.append("")
+    
+    for idx, fact in enumerate(facts):
+        pred = fact[0]
+        args = fact[1:]
+        
+        def fmt_res(val):
+            val_str = str(val).strip()
+            if val_str.isalnum():
+                return f":{val_str}"
+            escaped = val_str.replace('"', '\\"')
+            return f'"{escaped}"'
+            
+        if len(args) == 1:
+            subj = fmt_res(args[0])
+            lines.append(f"{subj} a :{pred} .")
+        elif len(args) == 2:
+            subj = fmt_res(args[0])
+            obj = fmt_res(args[1])
+            lines.append(f"{subj} :{pred} {obj} .")
+        else:
+            rel_uri = f":relation_{idx}"
+            lines.append(f"{rel_uri} a :Relation ;")
+            lines.append(f"    :type :{pred} ;")
+            for i, arg in enumerate(args):
+                val = fmt_res(arg)
+                lines.append(f"    :arg{i} {val} ;")
+            if lines:
+                lines[-1] = lines[-1].rstrip(" ;") + " ."
+                
+    turtle_content = "\n".join(lines)
+    return Response(content=turtle_content, media_type="text/turtle")
+
 @app.post("/api/interpret")
-def interpret_sexpr(req: InterpretRequest, user: Optional[dict] = Depends(get_auth_user)):
+@limiter.limit("5/minute")
+def interpret_sexpr(req: InterpretRequest, request: Request, user: Optional[dict] = Depends(get_auth_user)):
     CURRENT_USER_TIER.set(user["tier"] if user else "free")
     expr_str = req.expr.strip()
     if not expr_str:
@@ -457,7 +519,6 @@ def interpret_sexpr(req: InterpretRequest, user: Optional[dict] = Depends(get_au
     if not check_sexpr_depth(expr_str):
         raise HTTPException(status_code=400, detail="S-expression nesting depth exceeds limit of 50.")
     try:
-        
         expr = canonicalizer.parse_sexpr(expr_str)
         result = evaluate(expr, world_model)
         
@@ -469,14 +530,16 @@ def interpret_sexpr(req: InterpretRequest, user: Optional[dict] = Depends(get_au
         raise HTTPException(status_code=400, detail=str(e))
 
 @app.post("/api/world/reset")
-def reset_world(user: Optional[dict] = Depends(get_auth_user)):
+@limiter.limit("5/minute")
+def reset_world(request: Request, user: Optional[dict] = Depends(get_auth_user)):
     world_model.clear()
     if user:
         database.increment_user_quota(user["id"])
     return {"success": True, "message": "World model reset successfully."}
 
 @app.post("/api/compile")
-def compile_endpoint(req: CompileRequest, user: Optional[dict] = Depends(get_auth_user)):
+@limiter.limit("5/minute")
+def compile_endpoint(req: CompileRequest, request: Request, user: Optional[dict] = Depends(get_auth_user)):
     CURRENT_USER_TIER.set(user["tier"] if user else "free")
     expr_str = req.expr.strip()
     if not expr_str:
@@ -484,7 +547,6 @@ def compile_endpoint(req: CompileRequest, user: Optional[dict] = Depends(get_aut
     if not check_sexpr_depth(expr_str):
         raise HTTPException(status_code=400, detail="S-expression nesting depth exceeds limit of 50.")
     try:
-        
         wrapped = f"({expr_str})"
         expressions = canonicalizer.parse_sexpr(wrapped)
         
