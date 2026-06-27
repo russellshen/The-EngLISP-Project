@@ -39,11 +39,17 @@
     <div class="app-container">
         
         <!-- Header -->
-        <header class="main-header">
-            <div class="logo-area">
-                <span class="logo-eng">Eng</span><span class="logo-lisp">LISP</span>
+        <header class="main-header" style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+            <div>
+                <div class="logo-area">
+                    <span class="logo-eng">Eng</span><span class="logo-lisp">LISP</span>
+                </div>
+                <p class="tagline">A Bidirectional Bridge Between Natural Language and Computation</p>
             </div>
-            <p class="tagline">A Bidirectional Bridge Between Natural Language and Computation</p>
+            <button id="btn-account-menu" class="action-btn secondary-btn" style="margin-top: 0; display: flex; align-items: center; gap: 6px;">
+                <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 16px; height: 16px; margin: 0;"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                <span id="account-btn-text">Account Portal</span>
+            </button>
         </header>
 
         <!-- Sandbox Quick Links -->
@@ -100,9 +106,12 @@
                                 <option value="fr">French</option>
                             </select>
                         </div>
-                        <button id="btn-voice-input" class="voice-btn" title="Voice Input" style="background: rgba(255, 255, 255, 0.05); border: 1px solid var(--glass-border); border-radius: 50%; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--text-light); transition: all 0.3s ease;">
-                            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 18px; height: 18px; margin: 0;"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v1a7 7 0 0 1-14 0v-1"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
-                        </button>
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <span id="badge-lexicon-status" class="badge" style="font-size: 0.75rem; font-weight: bold; color: var(--text-secondary); background: rgba(255,255,255,0.05); padding: 0.25rem 0.5rem; border-radius: 4px; border: 1px solid var(--glass-border); transition: all 0.3s ease;">Sample Lexicon</span>
+                            <button id="btn-voice-input" class="voice-btn" title="Voice Input" style="background: rgba(255, 255, 255, 0.05); border: 1px solid var(--glass-border); border-radius: 50%; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--text-light); transition: all 0.3s ease;">
+                                <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 18px; height: 18px; margin: 0;"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v1a7 7 0 0 1-14 0v-1"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
+                            </button>
+                        </div>
                     </div>
                     <textarea 
                         id="input-nl-text" 
@@ -338,6 +347,138 @@
         </footer>
     </div>
     
+    <!-- User Account Modal -->
+    <div id="modal-account" class="modal-overlay">
+        <div class="modal-content card">
+            <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+                <h3 class="card-title">User Account Portal</h3>
+                <button id="btn-close-account" class="modal-close-btn">&times;</button>
+            </div>
+            <div class="card-body">
+                
+                <!-- Logged Out View -->
+                <div id="account-logged-out-view">
+                    <div id="auth-main-panel">
+                        <div class="auth-tabs" style="display: flex; gap: 10px; border-bottom: 1px solid var(--glass-border); padding-bottom: 0.8rem;">
+                            <button id="tab-auth-login" class="tab-btn active" style="flex: 1;">Login</button>
+                            <button id="tab-auth-signup" class="tab-btn" style="flex: 1;">Sign Up</button>
+                        </div>
+                        
+                        <form id="form-auth" style="margin-top: 1.5rem; display: flex; flex-direction: column; gap: 1rem;">
+                            <div class="form-group">
+                                <label class="lang-label" style="display: block; margin-bottom: 0.4rem;">Email Address</label>
+                                <input type="email" id="auth-email" class="text-input" placeholder="email@example.com" required style="width: 100%; border: 1px solid var(--glass-border); background: rgba(0, 0, 0, 0.2); padding: 0.6rem; border-radius: 6px; color: var(--text-light); font-family: inherit;">
+                            </div>
+                            <div class="form-group">
+                                <label class="lang-label" style="display: block; margin-bottom: 0.4rem;">Password</label>
+                                <input type="password" id="auth-password" class="text-input" placeholder="••••••••" required style="width: 100%; border: 1px solid var(--glass-border); background: rgba(0, 0, 0, 0.2); padding: 0.6rem; border-radius: 6px; color: var(--text-light); font-family: inherit;">
+                            </div>
+                            <a href="#" id="link-forgot-password" style="font-size: 0.8rem; color: var(--accent-cyan); text-decoration: none; text-align: right; display: block; margin-top: -0.5rem;">Forgot Password?</a>
+                            <button type="submit" id="btn-auth-submit" class="action-btn primary-btn" style="margin-top: 0.5rem; width: 100%;">
+                                <span>Log In</span>
+                            </button>
+                        </form>
+                    </div>
+
+                    <!-- Forgot Password Panel -->
+                    <div id="auth-forgot-panel" style="display: none; margin-top: 1rem;">
+                        <h4 class="card-title" style="font-size: 1.1rem; margin-bottom: 0.5rem;">Recover Password</h4>
+                        <p class="card-desc" style="font-size: 0.85rem; margin-bottom: 1rem;">Enter your email to request a temporary 6-digit recovery passcode.</p>
+                        
+                        <form id="form-forgot" style="display: flex; flex-direction: column; gap: 1rem;">
+                            <div class="form-group">
+                                <label class="lang-label" style="display: block; margin-bottom: 0.4rem;">Email Address</label>
+                                <input type="email" id="forgot-email" class="text-input" placeholder="email@example.com" required style="width: 100%; border: 1px solid var(--glass-border); background: rgba(0, 0, 0, 0.2); padding: 0.6rem; border-radius: 6px; color: var(--text-light); font-family: inherit;">
+                            </div>
+                            <button type="submit" id="btn-forgot-submit" class="action-btn primary-btn" style="width: 100%; margin-top: 0.5rem;">
+                                <span>Send Passcode</span>
+                            </button>
+                            <a href="#" class="link-back-to-login" style="font-size: 0.8rem; color: var(--text-secondary); text-decoration: none; text-align: center; display: block; margin-top: 0.5rem;">&larr; Back to Login</a>
+                        </form>
+                    </div>
+
+                    <!-- Reset Password Panel -->
+                    <div id="auth-reset-panel" style="display: none; margin-top: 1rem;">
+                        <h4 class="card-title" style="font-size: 1.1rem; margin-bottom: 0.5rem;">Reset Password</h4>
+                        <p class="card-desc" style="font-size: 0.85rem; margin-bottom: 1rem;">Enter the passcode sent to your email and choose a new password.</p>
+                        
+                        <form id="form-reset" style="display: flex; flex-direction: column; gap: 1rem;">
+                            <div class="form-group">
+                                <label class="lang-label" style="display: block; margin-bottom: 0.4rem;">Email Address</label>
+                                <input type="email" id="reset-email" class="text-input" placeholder="email@example.com" required style="width: 100%; border: 1px solid var(--glass-border); background: rgba(0, 0, 0, 0.2); padding: 0.6rem; border-radius: 6px; color: var(--text-light); font-family: inherit;">
+                            </div>
+                            <div class="form-group">
+                                <label class="lang-label" style="display: block; margin-bottom: 0.4rem;">6-Digit Passcode</label>
+                                <input type="text" id="reset-code" class="text-input" placeholder="123456" required style="width: 100%; border: 1px solid var(--glass-border); background: rgba(0, 0, 0, 0.2); padding: 0.6rem; border-radius: 6px; color: var(--text-light); font-family: inherit; font-weight: bold; letter-spacing: 2px; text-align: center;">
+                            </div>
+                            <div class="form-group">
+                                <label class="lang-label" style="display: block; margin-bottom: 0.4rem;">New Password</label>
+                                <input type="password" id="reset-new-password" class="text-input" placeholder="••••••••" required style="width: 100%; border: 1px solid var(--glass-border); background: rgba(0, 0, 0, 0.2); padding: 0.6rem; border-radius: 6px; color: var(--text-light); font-family: inherit;">
+                            </div>
+                            <button type="submit" id="btn-reset-submit" class="action-btn primary-btn" style="width: 100%; margin-top: 0.5rem;">
+                                <span>Reset Password</span>
+                            </button>
+                            <a href="#" class="link-back-to-login" style="font-size: 0.8rem; color: var(--text-secondary); text-decoration: none; text-align: center; display: block; margin-top: 0.5rem;">&larr; Cancel</a>
+                        </form>
+                    </div>
+                </div>
+                
+                <!-- Logged In View -->
+                <div id="account-logged-in-view" style="display: none;">
+                    <div class="profile-details" style="display: flex; flex-direction: column; gap: 0.8rem; background: rgba(0, 0, 0, 0.2); border: 1px solid var(--glass-border); padding: 1rem; border-radius: 8px;">
+                        <div>
+                            <span class="lang-label">Email:</span>
+                            <span id="profile-email" style="font-weight: 500; color: var(--text-light); margin-left: 0.5rem;">user@example.com</span>
+                        </div>
+                        <div>
+                            <span class="lang-label">Account Tier:</span>
+                            <span id="profile-tier" class="badge" style="font-weight: bold; color: var(--accent-cyan); background: rgba(34, 211, 238, 0.1); padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.8rem; margin-left: 0.5rem; border: 1px solid rgba(34, 211, 238, 0.2);">Free</span>
+                        </div>
+                        <div>
+                            <span class="lang-label">Usage Quota:</span>
+                            <span id="profile-quota" style="color: var(--text-light); margin-left: 0.5rem;">0 / 100 requests used</span>
+                        </div>
+                        <div style="display: flex; flex-direction: column; gap: 0.3rem; margin-top: 0.4rem;">
+                            <span class="lang-label">API Access Key:</span>
+                            <div style="display: flex; gap: 6px; align-items: center; width: 100%;">
+                                <input type="text" id="profile-apikey" readonly class="text-input" style="flex: 1; font-family: var(--font-mono); font-size: 0.8rem; background: rgba(0,0,0,0.3); border: 1px solid var(--glass-border); padding: 0.4rem; border-radius: 4px; color: #a7f3d0;" value="englisp_live_...">
+                                <button id="btn-copy-apikey" class="action-btn secondary-btn" style="margin-top: 0; padding: 0.4rem 0.8rem; font-size: 0.8rem;">Copy</button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="subscription-section" style="margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--glass-border);">
+                        <h4 class="card-title" style="font-size: 1rem; margin-bottom: 0.5rem;">Mock Subscription Plan</h4>
+                        <p class="card-desc" style="font-size: 0.8rem; margin-bottom: 0.8rem;">Access the full-scale private databases containing 100k+ WordNet vocabulary items.</p>
+                        <button id="btn-toggle-subscription" class="action-btn primary-btn" style="width: 100%; margin-top: 0;">
+                            <span>Upgrade to Paid Tier</span>
+                        </button>
+                    </div>
+                    
+                    <div class="password-section" style="margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--glass-border);">
+                        <h4 class="card-title" style="font-size: 1rem; margin-bottom: 0.5rem;">Change Account Password</h4>
+                        <form id="form-change-password" style="display: flex; flex-direction: column; gap: 0.8rem; margin-top: 0.8rem;">
+                            <div class="form-group">
+                                <input type="password" id="pw-old" placeholder="Current Password" required class="text-input" style="width: 100%; border: 1px solid var(--glass-border); background: rgba(0,0,0,0.2); padding: 0.5rem; border-radius: 4px; color: var(--text-light);">
+                            </div>
+                            <div class="form-group">
+                                <input type="password" id="pw-new" placeholder="New Password (min 6 chars)" required class="text-input" style="width: 100%; border: 1px solid var(--glass-border); background: rgba(0,0,0,0.2); padding: 0.5rem; border-radius: 4px; color: var(--text-light);">
+                            </div>
+                            <button type="submit" class="action-btn secondary-btn" style="width: 100%; margin-top: 0.2rem;">
+                                <span>Change Password</span>
+                            </button>
+                        </form>
+                    </div>
+                    
+                    <button id="btn-auth-logout" class="action-btn secondary-btn" style="width: 100%; margin-top: 1.5rem; border-color: rgba(239, 68, 68, 0.4); color: #f87171;">
+                        <span>Logout</span>
+                    </button>
+                </div>
+                
+            </div>
+        </div>
+    </div>
+
     <script src="app.js"></script>
 </body>
 </html>

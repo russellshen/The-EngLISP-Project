@@ -34,3 +34,7 @@ englisp/resources/word_to_synsets_*.lson
 web/users.db
 *.db
 
+# Build & Log Artifacts
+dist/
+*.egg-info/
+web/logs/

@@ -14,6 +14,388 @@
  */
 
 document.addEventListener('DOMContentLoaded', () => {
+    // ==========================================
+    // API FETCH WRAPPER WITH AUTHENTICATION
+    // ==========================================
+    async function apiFetch(url, options = {}) {
+        options.headers = options.headers || {};
+        const apiKey = localStorage.getItem('englisp_api_key');
+        if (apiKey) {
+            options.headers['X-API-Key'] = apiKey;
+        }
+        return fetch(url, options);
+    }
+
+    // Auth elements
+    const btnAccountMenu = document.getElementById('btn-account-menu');
+    const accountBtnText = document.getElementById('account-btn-text');
+    const modalAccount = document.getElementById('modal-account');
+    const btnCloseAccount = document.getElementById('btn-close-account');
+    
+    const viewLoggedOut = document.getElementById('account-logged-out-view');
+    const viewLoggedIn = document.getElementById('account-logged-in-view');
+    
+    const tabAuthLogin = document.getElementById('tab-auth-login');
+    const tabAuthSignup = document.getElementById('tab-auth-signup');
+    const formAuth = document.getElementById('form-auth');
+    const authEmail = document.getElementById('auth-email');
+    const authPassword = document.getElementById('auth-password');
+    const btnAuthSubmit = document.getElementById('btn-auth-submit');
+    
+    const profileEmail = document.getElementById('profile-email');
+    const profileTier = document.getElementById('profile-tier');
+    const profileQuota = document.getElementById('profile-quota');
+    const profileApiKey = document.getElementById('profile-apikey');
+    const btnCopyApiKey = document.getElementById('btn-copy-apikey');
+    const btnToggleSubscription = document.getElementById('btn-toggle-subscription');
+    
+    const formChangePassword = document.getElementById('form-change-password');
+    const pwOld = document.getElementById('pw-old');
+    const pwNew = document.getElementById('pw-new');
+    
+    const btnAuthLogout = document.getElementById('btn-auth-logout');
+    
+    let currentAuthMode = 'login'; // 'login' or 'signup'
+
+    function updateAccountUI(user) {
+        const badgeLexicon = document.getElementById('badge-lexicon-status');
+        if (user) {
+            viewLoggedOut.style.display = 'none';
+            viewLoggedIn.style.display = 'block';
+            
+            profileEmail.textContent = user.email;
+            profileTier.textContent = user.tier;
+            profileQuota.textContent = `${user.quota_used} / ${user.quota_limit} requests used`;
+            profileApiKey.value = user.api_key;
+            
+            accountBtnText.textContent = user.email.split('@')[0];
+            
+            if (user.tier === 'paid') {
+                btnToggleSubscription.textContent = 'Cancel Paid Tier';
+                btnToggleSubscription.classList.remove('primary-btn');
+                btnToggleSubscription.classList.add('secondary-btn');
+                btnToggleSubscription.disabled = false;
+                profileTier.style.color = '#10b981';
+                profileTier.style.backgroundColor = 'rgba(16, 185, 129, 0.1)';
+                profileTier.style.borderColor = 'rgba(16, 185, 129, 0.2)';
+                
+                if (badgeLexicon) {
+                    badgeLexicon.textContent = 'Full Lexicon';
+                    badgeLexicon.style.color = '#10b981';
+                    badgeLexicon.style.backgroundColor = 'rgba(16, 185, 129, 0.1)';
+                    badgeLexicon.style.borderColor = 'rgba(16, 185, 129, 0.3)';
+                    badgeLexicon.style.boxShadow = '0 0 10px rgba(16, 185, 129, 0.2)';
+                }
+            } else if (user.tier === 'admin') {
+                btnToggleSubscription.textContent = 'Admin Tier (No Limits)';
+                btnToggleSubscription.disabled = true;
+                profileTier.style.color = '#f59e0b';
+                profileTier.style.backgroundColor = 'rgba(245, 158, 11, 0.1)';
+                profileTier.style.borderColor = 'rgba(245, 158, 11, 0.2)';
+                
+                if (badgeLexicon) {
+                    badgeLexicon.textContent = 'Full Lexicon (Admin)';
+                    badgeLexicon.style.color = '#f59e0b';
+                    badgeLexicon.style.backgroundColor = 'rgba(245, 158, 11, 0.1)';
+                    badgeLexicon.style.borderColor = 'rgba(245, 158, 11, 0.3)';
+                    badgeLexicon.style.boxShadow = '0 0 10px rgba(245, 158, 11, 0.2)';
+                }
+            } else {
+                btnToggleSubscription.textContent = 'Upgrade to Paid Tier';
+                btnToggleSubscription.classList.remove('secondary-btn');
+                btnToggleSubscription.classList.add('primary-btn');
+                btnToggleSubscription.disabled = false;
+                profileTier.style.color = 'var(--accent-cyan)';
+                profileTier.style.backgroundColor = 'rgba(34, 211, 238, 0.1)';
+                profileTier.style.borderColor = 'rgba(34, 211, 238, 0.2)';
+                
+                if (badgeLexicon) {
+                    badgeLexicon.textContent = 'Sample Lexicon';
+                    badgeLexicon.style.color = 'var(--text-secondary)';
+                    badgeLexicon.style.backgroundColor = 'rgba(255,255,255,0.05)';
+                    badgeLexicon.style.borderColor = 'var(--glass-border)';
+                    badgeLexicon.style.boxShadow = 'none';
+                }
+            }
+        } else {
+            viewLoggedOut.style.display = 'block';
+            viewLoggedIn.style.display = 'none';
+            accountBtnText.textContent = 'Account Portal';
+            
+            if (badgeLexicon) {
+                badgeLexicon.textContent = 'Sample Lexicon';
+                badgeLexicon.style.color = 'var(--text-secondary)';
+                badgeLexicon.style.backgroundColor = 'rgba(255,255,255,0.05)';
+                badgeLexicon.style.borderColor = 'var(--glass-border)';
+                badgeLexicon.style.boxShadow = 'none';
+            }
+        }
+    }
+
+    async function checkAuthStatus() {
+        const apiKey = localStorage.getItem('englisp_api_key');
+        if (!apiKey) {
+            updateAccountUI(null);
+            return;
+        }
+        try {
+            const res = await fetch('/api/auth/me', {
+                headers: { 'X-API-Key': apiKey }
+            });
+            if (res.ok) {
+                const user = await res.json();
+                updateAccountUI(user);
+            } else {
+                localStorage.removeItem('englisp_api_key');
+                updateAccountUI(null);
+            }
+        } catch (e) {
+            console.error('Auth verification failed', e);
+        }
+    }
+
+    // Modal view handlers
+    btnAccountMenu.addEventListener('click', () => {
+        modalAccount.classList.add('active');
+        checkAuthStatus();
+    });
+    
+    btnCloseAccount.addEventListener('click', () => {
+        modalAccount.classList.remove('active');
+    });
+    
+    modalAccount.addEventListener('click', (e) => {
+        if (e.target === modalAccount) {
+            modalAccount.classList.remove('active');
+        }
+    });
+
+    // Recovery elements
+    const linkForgotPw = document.getElementById('link-forgot-password');
+    const panelAuthMain = document.getElementById('auth-main-panel');
+    const panelAuthForgot = document.getElementById('auth-forgot-panel');
+    const panelAuthReset = document.getElementById('auth-reset-panel');
+    
+    const formForgot = document.getElementById('form-forgot');
+    const forgotEmail = document.getElementById('forgot-email');
+    const btnForgotSubmit = document.getElementById('btn-forgot-submit');
+    
+    const formReset = document.getElementById('form-reset');
+    const resetEmail = document.getElementById('reset-email');
+    const resetCode = document.getElementById('reset-code');
+    const resetNewPw = document.getElementById('reset-new-password');
+    const btnResetSubmit = document.getElementById('btn-reset-submit');
+    
+    const linksBackToLogin = document.querySelectorAll('.link-back-to-login');
+
+    tabAuthLogin.addEventListener('click', () => {
+        currentAuthMode = 'login';
+        tabAuthLogin.classList.add('active');
+        tabAuthSignup.classList.remove('active');
+        btnAuthSubmit.querySelector('span').textContent = 'Log In';
+    });
+    
+    tabAuthSignup.addEventListener('click', () => {
+        currentAuthMode = 'signup';
+        tabAuthSignup.classList.add('active');
+        tabAuthLogin.classList.remove('active');
+        btnAuthSubmit.querySelector('span').textContent = 'Sign Up';
+    });
+
+    linkForgotPw.addEventListener('click', (e) => {
+        e.preventDefault();
+        panelAuthMain.style.display = 'none';
+        panelAuthForgot.style.display = 'block';
+        panelAuthReset.style.display = 'none';
+    });
+    
+    linksBackToLogin.forEach(link => {
+        link.addEventListener('click', (e) => {
+            e.preventDefault();
+            panelAuthMain.style.display = 'block';
+            panelAuthForgot.style.display = 'none';
+            panelAuthReset.style.display = 'none';
+        });
+    });
+
+    formAuth.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const email = authEmail.value.trim();
+        const password = authPassword.value;
+        const endpoint = currentAuthMode === 'login' ? '/api/auth/login' : '/api/auth/register';
+        
+        btnAuthSubmit.disabled = true;
+        try {
+            const response = await fetch(endpoint, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email, password })
+            });
+            const data = await response.json();
+            if (response.ok) {
+                authEmail.value = '';
+                authPassword.value = '';
+                if (currentAuthMode === 'login') {
+                    const key = data.api_key;
+                    localStorage.setItem('englisp_api_key', key);
+                    showToast('Logged in successfully!', 'success');
+                    await checkAuthStatus();
+                } else {
+                    showToast((data.message || 'Account registered! Please check email to verify.') + ' (Local Dev: Link logged to terminal & web/logs/emails/)', 'success');
+                    currentAuthMode = 'login';
+                    tabAuthLogin.classList.add('active');
+                    tabAuthSignup.classList.remove('active');
+                    btnAuthSubmit.querySelector('span').textContent = 'Log In';
+                }
+            } else {
+                showToast(data.detail || 'Authentication failed.', 'error');
+            }
+        } catch (err) {
+            showToast('Connection to auth server failed.', 'error');
+        } finally {
+            btnAuthSubmit.disabled = false;
+        }
+    });
+
+    formForgot.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const email = forgotEmail.value.trim();
+        btnForgotSubmit.disabled = true;
+        try {
+            const res = await fetch('/api/auth/forgot-password', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email })
+            });
+            const data = await res.json();
+            if (res.ok) {
+                showToast(data.message, 'success');
+                resetEmail.value = email;
+                panelAuthForgot.style.display = 'none';
+                panelAuthReset.style.display = 'block';
+            } else {
+                showToast(data.detail || 'Failed to request password reset.', 'error');
+            }
+        } catch (err) {
+            showToast('Connection error.', 'error');
+        } finally {
+            btnForgotSubmit.disabled = false;
+        }
+    });
+    
+    formReset.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const email = resetEmail.value.trim();
+        const passcode = resetCode.value.trim();
+        const new_password = resetNewPw.value;
+        
+        if (new_password.length < 6) {
+            showToast('Password must be at least 6 characters.', 'error');
+            return;
+        }
+        
+        btnResetSubmit.disabled = true;
+        try {
+            const res = await fetch('/api/auth/reset-password', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email, passcode, new_password })
+            });
+            const data = await res.json();
+            if (res.ok) {
+                showToast('Password reset successfully! You can now log in.', 'success');
+                resetCode.value = '';
+                resetNewPw.value = '';
+                panelAuthMain.style.display = 'block';
+                panelAuthReset.style.display = 'none';
+            } else {
+                showToast(data.detail || 'Password reset failed.', 'error');
+            }
+        } catch (err) {
+            showToast('Connection error.', 'error');
+        } finally {
+            btnResetSubmit.disabled = false;
+        }
+    });
+
+    btnCopyApiKey.addEventListener('click', () => {
+        profileApiKey.select();
+        navigator.clipboard.writeText(profileApiKey.value)
+            .then(() => showToast('API Key copied to clipboard!', 'success'))
+            .catch(() => showToast('Failed to copy key.', 'error'));
+    });
+
+    btnToggleSubscription.addEventListener('click', async () => {
+        const apiKey = localStorage.getItem('englisp_api_key');
+        if (!apiKey) return;
+        
+        const isCurrentlyPaid = btnToggleSubscription.textContent.includes('Cancel');
+        const duration = isCurrentlyPaid ? 0 : 2592000;
+        
+        btnToggleSubscription.disabled = true;
+        try {
+            const res = await apiFetch('/api/auth/subscribe', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ duration_seconds: duration })
+            });
+            const data = await res.json();
+            if (res.ok) {
+                showToast(duration === 0 ? 'Subscription cancelled successfully.' : 'Upgraded to Paid Tier!', 'success');
+                await checkAuthStatus();
+            } else {
+                showToast(data.detail || 'Failed to update subscription status.', 'error');
+            }
+        } catch (e) {
+            showToast('Connection to billing system failed.', 'error');
+        } finally {
+            btnToggleSubscription.disabled = false;
+        }
+    });
+
+    formChangePassword.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const old_password = pwOld.value;
+        const new_password = pwNew.value;
+        
+        if (new_password.length < 6) {
+            showToast('New password must be at least 6 characters.', 'error');
+            return;
+        }
+        
+        const btnChange = formChangePassword.querySelector('button[type="submit"]');
+        btnChange.disabled = true;
+        try {
+            const res = await apiFetch('/api/auth/change-password', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ old_password, new_password })
+            });
+            const data = await res.json();
+            if (res.ok) {
+                showToast('Password updated successfully!', 'success');
+                pwOld.value = '';
+                pwNew.value = '';
+            } else {
+                showToast(data.detail || 'Failed to change password.', 'error');
+            }
+        } catch (err) {
+            showToast('Connection to server failed.', 'error');
+        } finally {
+            btnChange.disabled = false;
+        }
+    });
+
+    btnAuthLogout.addEventListener('click', () => {
+        localStorage.removeItem('englisp_api_key');
+        updateAccountUI(null);
+        showToast('Logged out successfully.', 'success');
+        modalAccount.classList.remove('active');
+    });
+
+    // Check auth status on page load
+    checkAuthStatus();
+
     // DOM Elements
     const inputNl = document.getElementById('input-nl-text');
     const btnParseNl = document.getElementById('btn-parse-nl');
@@ -243,7 +625,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (btnExportRdf) {
         btnExportRdf.addEventListener('click', async () => {
             try {
-                const response = await fetch('/api/world/export');
+                const response = await apiFetch('/api/world/export');
                 if (!response.ok) {
                     throw new Error('Failed to export world state.');
                 }
@@ -277,7 +659,7 @@ document.addEventListener('DOMContentLoaded', () => {
         setLoadingState(true);
         const lang = document.getElementById('select-lang').value;
         try {
-            const response = await fetch('/api/parse', {
+            const response = await apiFetch('/api/parse', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ text, lang })
@@ -299,7 +681,7 @@ document.addEventListener('DOMContentLoaded', () => {
         setLoadingState(true);
         const lang = document.getElementById('select-lang').value;
         try {
-            const response = await fetch('/api/generate-from-englisp', {
+            const response = await apiFetch('/api/generate-from-englisp', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ englisp, lang })
@@ -321,7 +703,7 @@ document.addEventListener('DOMContentLoaded', () => {
         setLoadingState(true);
         const lang = document.getElementById('select-lang').value;
         try {
-            const response = await fetch('/api/generate-from-minimalist', {
+            const response = await apiFetch('/api/generate-from-minimalist', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ minimalist, lang })
@@ -382,7 +764,7 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
         try {
-            const response = await fetch('/api/compile', {
+            const response = await apiFetch('/api/compile', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ expr, target: currentCompilerTarget })
@@ -589,7 +971,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function fetchWorldState() {
         try {
-            const response = await fetch('/api/world');
+            const response = await apiFetch('/api/world');
             const data = await response.json();
             if (response.ok && data.facts) {
                 renderWorldFacts(data.facts);
@@ -623,7 +1005,7 @@ document.addEventListener('DOMContentLoaded', () => {
         consoleInput.value = '';
 
         try {
-            const response = await fetch('/api/interpret', {
+            const response = await apiFetch('/api/interpret', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ expr: cmd })
@@ -681,7 +1063,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     btnResetWorld.addEventListener('click', async () => {
         try {
-            const response = await fetch('/api/world/reset', { method: 'POST' });
+            const response = await apiFetch('/api/world/reset', { method: 'POST' });
             const data = await response.json();
             if (response.ok && data.success) {
                 appendConsoleLog(data.message, 'system-msg');
@@ -775,6 +1157,16 @@ document.addEventListener('DOMContentLoaded', () => {
         agentLogs.scrollTop = agentLogs.scrollHeight;
     }
 
+    function forceStopSimulation() {
+        if (simIntervalId) {
+            stopSimulation();
+            btnToggleSim.querySelector('span').textContent = 'Start Simulation';
+            btnToggleSim.classList.remove('accent-btn');
+            btnToggleSim.classList.add('primary-btn');
+            appendAgentLog('Simulation auto-stopped.', 'system-msg');
+        }
+    }
+
     function startSimulation() {
         const interval = parseInt(simSpeed.value);
         simIntervalId = setInterval(runSimulationTick, interval);
@@ -810,11 +1202,22 @@ document.addEventListener('DOMContentLoaded', () => {
             appendAgentLog(`Alice observing event: "${randSentence}"`, 'agent-alice');
             
             try {
-                const response = await fetch('/api/parse', {
+                const response = await apiFetch('/api/parse', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ text: randSentence })
                 });
+                
+                if (response.status === 429) {
+                    showToast('Sandbox rate limit exceeded (5 requests/minute). Please log in to bypass rate limits!', 'error');
+                    forceStopSimulation();
+                    return;
+                } else if (response.status === 402) {
+                    showToast('API quota limit exceeded. Please upgrade your subscription!', 'error');
+                    forceStopSimulation();
+                    return;
+                }
+                
                 const data = await response.json();
                 if (response.ok && data.success) {
                     const fact_str = data.pipeline.stage4_minimalist;
@@ -835,11 +1238,22 @@ document.addEventListener('DOMContentLoaded', () => {
             appendAgentLog(`Bob querying world: <code>${randQuery}</code>`, 'agent-bob');
             
             try {
-                const response = await fetch('/api/interpret', {
+                const response = await apiFetch('/api/interpret', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ expr: randQuery })
                 });
+                
+                if (response.status === 429) {
+                    showToast('Sandbox rate limit exceeded (5 requests/minute). Please log in to bypass rate limits!', 'error');
+                    forceStopSimulation();
+                    return;
+                } else if (response.status === 402) {
+                    showToast('API quota limit exceeded. Please upgrade your subscription!', 'error');
+                    forceStopSimulation();
+                    return;
+                }
+                
                 const data = await response.json();
                 if (response.ok) {
                     if (data.bindings && data.bindings.length > 0) {
@@ -863,20 +1277,43 @@ document.addEventListener('DOMContentLoaded', () => {
             appendAgentLog(`Charlie asserting logic rule: <code>${randRule}</code>`, 'agent-charlie');
             
             try {
-                const resRule = await fetch('/api/interpret', {
+                const resRule = await apiFetch('/api/interpret', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ expr: randRule })
                 });
+                
+                if (resRule.status === 429) {
+                    showToast('Sandbox rate limit exceeded (5 requests/minute). Please log in to bypass rate limits!', 'error');
+                    forceStopSimulation();
+                    return;
+                } else if (resRule.status === 402) {
+                    showToast('API quota limit exceeded. Please upgrade your subscription!', 'error');
+                    forceStopSimulation();
+                    return;
+                }
+                
                 const ruleData = await resRule.json();
                 if (resRule.ok && ruleData.success) {
                     appendAgentLog(`Charlie rule asserted successfully. Triggering inference...`, 'agent-charlie');
                     const triggerQuery = randRule.includes("scared") ? "(scared ?who)" : "(sleeps ?who)";
-                    const resQuery = await fetch('/api/interpret', {
+                    
+                    const resQuery = await apiFetch('/api/interpret', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ expr: triggerQuery })
                     });
+                    
+                    if (resQuery.status === 429) {
+                        showToast('Sandbox rate limit exceeded (5 requests/minute). Please log in to bypass rate limits!', 'error');
+                        forceStopSimulation();
+                        return;
+                    } else if (resQuery.status === 402) {
+                        showToast('API quota limit exceeded. Please upgrade your subscription!', 'error');
+                        forceStopSimulation();
+                        return;
+                    }
+                    
                     const queryData = await resQuery.json();
                     if (resQuery.ok && queryData.success && queryData.bindings.length > 0) {
                         const bindings = queryData.bindings.map(b => JSON.stringify(b)).join(', ');

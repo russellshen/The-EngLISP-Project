@@ -30,9 +30,9 @@ authors = [
     { name = "Russell Shen", email = "russellshen7@gmail.com" }
 ]
 requires-python = ">=3.13"
+license = "CC-BY-NC-ND-4.0"
 classifiers = [
     "Programming Language :: Python :: 3",
-    "License :: Other/Proprietary License",
     "Operating System :: OS Independent",
 ]
 dependencies = [
@@ -45,3 +45,7 @@ dev = [
     "pytest>=8.0.0",
     "httpx>=0.27.0",
 ]
+
+[tool.setuptools.packages.find]
+include = ["englisp*"]
+exclude = ["web*", "tests*"]

@@ -45,7 +45,11 @@ def db_init():
             quota_used INTEGER DEFAULT 0,
             created_at TEXT NOT NULL,
             subscription_expires_at TEXT,
-            status TEXT DEFAULT 'none'
+            status TEXT DEFAULT 'none',
+            is_verified INTEGER DEFAULT 0,
+            verification_token TEXT,
+            reset_token TEXT,
+            reset_token_expires_at TEXT
         )
     """)
     
@@ -56,8 +60,29 @@ def db_init():
         cursor.execute("ALTER TABLE users ADD COLUMN subscription_expires_at TEXT")
     if "status" not in columns:
         cursor.execute("ALTER TABLE users ADD COLUMN status TEXT DEFAULT 'none'")
+    if "is_verified" not in columns:
+        cursor.execute("ALTER TABLE users ADD COLUMN is_verified INTEGER DEFAULT 0")
+    if "verification_token" not in columns:
+        cursor.execute("ALTER TABLE users ADD COLUMN verification_token TEXT")
+    if "reset_token" not in columns:
+        cursor.execute("ALTER TABLE users ADD COLUMN reset_token TEXT")
+    if "reset_token_expires_at" not in columns:
+        cursor.execute("ALTER TABLE users ADD COLUMN reset_token_expires_at TEXT")
         
     conn.commit()
+    
+    # Bootstrap default admin account if not exists
+    cursor.execute("SELECT * FROM users WHERE email = ?", ("admin@englisp.com",))
+    if not cursor.fetchone():
+        admin_pass_hash = hash_password("adminpassword123")
+        admin_key = generate_api_key()
+        created_at = datetime.utcnow().isoformat()
+        cursor.execute(
+            "INSERT INTO users (email, password_hash, api_key, tier, quota_limit, status, created_at, is_verified) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            ("admin@englisp.com", admin_pass_hash, admin_key, "admin", 999999, "active", created_at, 1)
+        )
+        conn.commit()
+        
     conn.close()
 
 def hash_password(password: str) -> str:
@@ -69,20 +94,36 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verifies that a plain password matches the stored hash."""
     return hash_password(plain_password) == hashed_password
 
+def update_user_password(email: str, new_password_hash: str) -> bool:
+    """Updates a user's password hash in the database."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            "UPDATE users SET password_hash = ? WHERE email = ?",
+            (new_password_hash, email.lower().strip())
+        )
+        conn.commit()
+        return cursor.rowcount > 0
+    except Exception:
+        return False
+    finally:
+        conn.close()
+
 def generate_api_key() -> str:
     """Generates a secure, random API key prefixed with 'englisp_live_'."""
     return "englisp_live_" + secrets.token_urlsafe(32)
 
-def create_user(email: str, password_hash: str = None) -> Optional[dict]:
-    """Creates a new user with a generated API key."""
+def create_user(email: str, password_hash: str = None, verification_token: str = None) -> Optional[dict]:
+    """Creates a new user with a generated API key and optional verification token."""
     api_key = generate_api_key()
     created_at = datetime.utcnow().isoformat()
     conn = get_db_connection()
     cursor = conn.cursor()
     try:
         cursor.execute(
-            "INSERT INTO users (email, password_hash, api_key, created_at) VALUES (?, ?, ?, ?)",
-            (email.lower().strip(), password_hash, api_key, created_at)
+            "INSERT INTO users (email, password_hash, api_key, created_at, verification_token, is_verified) VALUES (?, ?, ?, ?, ?, 0)",
+            (email.lower().strip(), password_hash, api_key, created_at, verification_token)
         )
         conn.commit()
         user_id = cursor.lastrowid
@@ -159,5 +200,74 @@ def downgrade_user_subscription(email: str) -> Optional[dict]:
         cursor.execute("SELECT * FROM users WHERE email = ?", (email.lower().strip(),))
         row = cursor.fetchone()
         return dict(row) if row else None
+    finally:
+        conn.close()
+
+def verify_user_by_token(token: str) -> Optional[dict]:
+    """Marks a user as verified based on their verification token."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("SELECT * FROM users WHERE verification_token = ?", (token,))
+        row = cursor.fetchone()
+        if not row:
+            return None
+        user = dict(row)
+        cursor.execute(
+            "UPDATE users SET is_verified = 1, verification_token = NULL WHERE id = ?",
+            (user["id"],)
+        )
+        conn.commit()
+        user["is_verified"] = 1
+        user["verification_token"] = None
+        return user
+    except Exception:
+        return None
+    finally:
+        conn.close()
+
+def set_user_reset_token(email: str, token: str, expires_at: str) -> bool:
+    """Sets a temporary reset token (passcode) and expiration for a user."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            "UPDATE users SET reset_token = ?, reset_token_expires_at = ? WHERE email = ?",
+            (token, expires_at, email.lower().strip())
+        )
+        conn.commit()
+        return cursor.rowcount > 0
+    except Exception:
+        return False
+    finally:
+        conn.close()
+
+def reset_user_password_by_token(email: str, token: str, new_password_hash: str) -> bool:
+    """Resets a user's password if the reset token matches and is not expired."""
+    from datetime import datetime
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            "SELECT * FROM users WHERE email = ? AND reset_token = ?",
+            (email.lower().strip(), token)
+        )
+        row = cursor.fetchone()
+        if not row:
+            return False
+        user = dict(row)
+        if user["reset_token_expires_at"]:
+            now = datetime.utcnow().isoformat()
+            if now > user["reset_token_expires_at"]:
+                return False
+        
+        cursor.execute(
+            "UPDATE users SET password_hash = ?, reset_token = NULL, reset_token_expires_at = NULL WHERE id = ?",
+            (new_password_hash, user["id"])
+        )
+        conn.commit()
+        return cursor.rowcount > 0
+    except Exception:
+        return False
     finally:
         conn.close()

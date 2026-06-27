@@ -19,10 +19,13 @@
 
 import os
 import time
-from datetime import datetime
+import secrets
+import smtplib
+from email.mime.text import MIMEText
+from datetime import datetime, timedelta
 from fastapi import FastAPI, HTTPException, Depends, Header, Query, Request, status
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel, Field
 from typing import Optional, Dict, Any, List
 
@@ -30,6 +33,49 @@ from englisp import parser, canonicalizer, minimizer
 from englisp.loader import CURRENT_USER_TIER
 from englisp.interpreter import WorldModel, evaluate
 from web import database
+
+def send_account_email(to_email: str, subject: str, text_content: str) -> bool:
+    """Dispatches account emails using SMTP if configured, otherwise logs to a file."""
+    smtp_host = os.environ.get("SMTP_HOST")
+    smtp_port = os.environ.get("SMTP_PORT", "587")
+    smtp_user = os.environ.get("SMTP_USER")
+    smtp_pass = os.environ.get("SMTP_PASSWORD")
+    
+    if smtp_host and smtp_user and smtp_pass:
+        try:
+            msg = MIMEText(text_content)
+            msg['Subject'] = subject
+            msg['From'] = smtp_user
+            msg['To'] = to_email
+            
+            with smtplib.SMTP(smtp_host, int(smtp_port)) as server:
+                server.starttls()
+                server.login(smtp_user, smtp_pass)
+                server.send_message(msg)
+            return True
+        except Exception as e:
+            print(f"SMTP Error sending email: {e}")
+            # Fall back to local file logging if SMTP fails
+            pass
+            
+    # Local file logging fallback for portable development
+    try:
+        log_dir = os.path.join(os.path.dirname(__file__), "logs", "emails")
+        os.makedirs(log_dir, exist_ok=True)
+        filename = f"{to_email.replace('@', '_at_')}_{int(time.time())}.txt"
+        filepath = os.path.join(log_dir, filename)
+        with open(filepath, "w", encoding="utf-8") as f:
+            f.write(f"To: {to_email}\n")
+            f.write(f"Subject: {subject}\n")
+            f.write(f"Date: {datetime.utcnow().isoformat()}\n")
+            f.write("-" * 40 + "\n")
+            f.write(text_content)
+        # Also print to stdout so it shows up in server logs
+        print(f"\n=== [EMAIL DISPATCHED] ===\nTo: {to_email}\nSubject: {subject}\nContent:\n{text_content}\n==========================\n")
+        return True
+    except Exception as e:
+        print(f"Failed to log email to file: {e}")
+        return False
 
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -134,9 +180,12 @@ def get_auth_user(
             # Auto downgrade
             user = database.downgrade_user_subscription(user["email"])
             
-    CURRENT_USER_TIER.set(user["tier"])
+    if user["tier"] == "admin":
+        CURRENT_USER_TIER.set("paid")
+    else:
+        CURRENT_USER_TIER.set(user["tier"])
         
-    if user["quota_used"] >= user["quota_limit"]:
+    if user["quota_used"] >= user["quota_limit"] and user["tier"] != "admin":
         raise HTTPException(
             status_code=status.HTTP_402_PAYMENT_REQUIRED,
             detail=f"API Quota exceeded ({user['quota_used']}/{user['quota_limit']}). Please upgrade your account."
@@ -226,6 +275,42 @@ class SubscribeRequest(BaseModel):
         examples=[60]
     )
 
+class ChangePasswordRequest(BaseModel):
+    old_password: str = Field(
+        ...,
+        max_length=100,
+        description="The user's current password."
+    )
+    new_password: str = Field(
+        ...,
+        max_length=100,
+        description="The user's new password (minimum 6 characters)."
+    )
+
+class ForgotPasswordRequest(BaseModel):
+    email: str = Field(
+        ...,
+        max_length=100,
+        description="The email address to send the recovery passcode to."
+    )
+
+class ResetPasswordRequest(BaseModel):
+    email: str = Field(
+        ...,
+        max_length=100,
+        description="The user's email address."
+    )
+    passcode: str = Field(
+        ...,
+        max_length=10,
+        description="The 6-digit recovery passcode."
+    )
+    new_password: str = Field(
+        ...,
+        max_length=100,
+        description="The new password (minimum 6 characters)."
+    )
+
 # --- Authentication & User Endpoints ---
 
 @app.post("/api/auth/register")
@@ -243,20 +328,64 @@ def api_register(req: AuthRequest, request: Request):
     if existing:
         raise HTTPException(status_code=400, detail="Email is already registered.")
         
+    verification_token = secrets.token_hex(32)
     hashed = database.hash_password(password)
-    user = database.create_user(email, hashed)
+    user = database.create_user(email, hashed, verification_token)
     if not user:
         raise HTTPException(status_code=500, detail="Failed to create account.")
         
+    # Send verification email
+    verify_url = f"{request.base_url}api/auth/verify-email?token={verification_token}"
+    email_text = f"Welcome to EngLISP!\n\nPlease verify your email address by clicking the link below:\n\n{verify_url}\n\nRegards,\nThe EngLISP Team"
+    send_account_email(user["email"], "Verify Your EngLISP Account", email_text)
+    
     return {
         "success": True,
-        "message": "Account registered successfully.",
-        "api_key": user["api_key"],
+        "message": "Account registered successfully. Please verify your email to log in.",
         "email": user["email"],
-        "tier": user["tier"],
-        "quota_limit": user["quota_limit"],
-        "quota_used": user["quota_used"]
+        "tier": user["tier"]
     }
+
+@app.get("/api/auth/verify-email", response_class=HTMLResponse)
+def api_verify_email(token: str = Query(...)):
+    user = database.verify_user_by_token(token)
+    if not user:
+        return """
+        <html>
+            <head>
+                <title>Email Verification Failed</title>
+                <style>
+                    body { font-family: sans-serif; text-align: center; padding: 50px; background-color: #0f0a1e; color: #fff; }
+                    .card { background: rgba(255,255,255,0.05); padding: 40px; border-radius: 12px; display: inline-block; border: 1px solid rgba(255,255,255,0.1); }
+                    h1 { color: #f87171; }
+                </style>
+            </head>
+            <body>
+                <div class="card">
+                    <h1>Verification Failed</h1>
+                    <p>Invalid or expired email verification token.</p>
+                </div>
+            </body>
+        </html>
+        """
+    return """
+    <html>
+        <head>
+            <title>Email Verified Successfully</title>
+            <style>
+                body { font-family: sans-serif; text-align: center; padding: 50px; background-color: #0f0a1e; color: #fff; }
+                .card { background: rgba(255,255,255,0.05); padding: 40px; border-radius: 12px; display: inline-block; border: 1px solid rgba(255,255,255,0.1); }
+                h1 { color: #22d3ee; }
+            </style>
+        </head>
+        <body>
+            <div class="card">
+                <h1>Verification Successful!</h1>
+                <p>Your email has been successfully verified. You can now close this window and log in on the dashboard.</p>
+            </div>
+        </body>
+    </html>
+    """
 
 @app.post("/api/auth/login")
 @limiter.limit("10/minute", key_func=get_remote_address)
@@ -270,6 +399,9 @@ def api_login(req: AuthRequest, request: Request):
         
     if not database.verify_password(password, user["password_hash"]):
         raise HTTPException(status_code=400, detail="Invalid email or password.")
+        
+    if not user.get("is_verified", 0):
+        raise HTTPException(status_code=403, detail="Please verify your email address to log in.")
         
     return {
         "success": True,
@@ -308,17 +440,79 @@ def api_me(request: Request, user: Optional[dict] = Depends(get_auth_user)):
 def api_subscribe(req: SubscribeRequest, request: Request, user: Optional[dict] = Depends(get_auth_user)):
     if not user:
         raise HTTPException(status_code=401, detail="Authentication required to subscribe.")
-    updated_user = database.subscribe_user(user["email"], req.duration_seconds)
+    
+    if req.duration_seconds <= 0:
+        updated_user = database.downgrade_user_subscription(user["email"])
+        msg = "Subscription cancelled successfully."
+    else:
+        updated_user = database.subscribe_user(user["email"], req.duration_seconds)
+        msg = "Subscription activated successfully."
+        
     if not updated_user:
-        raise HTTPException(status_code=500, detail="Failed to activate subscription.")
+        raise HTTPException(status_code=500, detail="Failed to update subscription.")
     return {
         "success": True,
-        "message": "Subscription activated successfully.",
+        "message": msg,
         "tier": updated_user["tier"],
         "quota_limit": updated_user["quota_limit"],
         "subscription_expires_at": updated_user["subscription_expires_at"],
         "status": updated_user["status"]
     }
+
+@app.post("/api/auth/change-password")
+@limiter.limit("10/minute", key_func=get_remote_address)
+def api_change_password(req: ChangePasswordRequest, request: Request, user: Optional[dict] = Depends(get_auth_user)):
+    if not user:
+        raise HTTPException(status_code=401, detail="Authentication required to change password.")
+    if not user["password_hash"]:
+        raise HTTPException(status_code=400, detail="OAuth/API-only accounts cannot change passwords.")
+    
+    if not database.verify_password(req.old_password, user["password_hash"]):
+        raise HTTPException(status_code=400, detail="Incorrect old password.")
+        
+    if len(req.new_password) < 6:
+        raise HTTPException(status_code=400, detail="New password must be at least 6 characters.")
+        
+    new_hash = database.hash_password(req.new_password)
+    success = database.update_user_password(user["email"], new_hash)
+    if not success:
+        raise HTTPException(status_code=500, detail="Failed to update password.")
+        
+    return {"success": True, "message": "Password updated successfully."}
+
+@app.post("/api/auth/forgot-password")
+@limiter.limit("5/minute", key_func=get_remote_address)
+def api_forgot_password(req: ForgotPasswordRequest, request: Request):
+    email = req.email.strip()
+    user = database.get_user_by_email(email)
+    if not user:
+        return {"success": True, "message": "If the email is registered, a recovery passcode has been sent."}
+        
+    passcode = "".join(secrets.choice("0123456789") for _ in range(6))
+    expires_at = (datetime.utcnow() + timedelta(minutes=15)).isoformat()
+    database.set_user_reset_token(email, passcode, expires_at)
+    
+    email_text = f"Hello,\n\nYou have requested a password recovery passcode for your EngLISP account.\n\nYour temporary recovery passcode is:\n\n{passcode}\n\nThis code will expire in 15 minutes.\n\nRegards,\nThe EngLISP Team"
+    send_account_email(user["email"], "EngLISP Password Recovery Code", email_text)
+    
+    return {"success": True, "message": "If the email is registered, a recovery passcode has been sent."}
+
+@app.post("/api/auth/reset-password")
+@limiter.limit("5/minute", key_func=get_remote_address)
+def api_reset_password(req: ResetPasswordRequest, request: Request):
+    email = req.email.strip()
+    passcode = req.passcode.strip()
+    new_password = req.new_password
+    
+    if len(new_password) < 6:
+        raise HTTPException(status_code=400, detail="New password must be at least 6 characters.")
+        
+    hashed = database.hash_password(new_password)
+    success = database.reset_user_password_by_token(email, passcode, hashed)
+    if not success:
+        raise HTTPException(status_code=400, detail="Invalid passcode or passcode has expired.")
+        
+    return {"success": True, "message": "Password reset successfully. You can now log in."}
 
 # --- Core EngLISP Pipeline API Endpoints ---
 
