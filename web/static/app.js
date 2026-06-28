@@ -1345,6 +1345,9 @@ document.addEventListener('DOMContentLoaded', () => {
             } catch (err) {
                 appendAgentLog(`Charlie connection error.`, 'agent-charlie');
             }
+        }
+    }
+
     // DB Compiler Panel Controls
     const tabDbSql = document.getElementById('tab-db-sql');
     const tabDbCypher = document.getElementById('tab-db-cypher');
@@ -1499,7 +1502,5 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // Initial setup
         resetAdventureGame();
-    }
-        }
     }
 });

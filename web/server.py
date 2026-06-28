@@ -86,6 +86,11 @@ from slowapi.middleware import SlowAPIMiddleware
 from fastapi.responses import JSONResponse
 
 def anonymous_only_limit_key(request: Request) -> Optional[str]:
+    # Bypass rate limits for local development testing
+    client_host = request.client.host if request.client else ""
+    if client_host in ("127.0.0.1", "localhost", "::1"):
+        return None
+        
     x_api_key = request.headers.get("X-API-Key")
     api_key = request.query_params.get("api_key")
     if x_api_key or api_key:
