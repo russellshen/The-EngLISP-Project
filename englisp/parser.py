@@ -150,6 +150,9 @@ def tag_tokens(tokens: List[str], lang: str = "en") -> List[Tuple[str, str]]:
     tagged = []
     for idx, token in enumerate(tokens):
         t_lower = token.lower()
+        if t_lower in ("exit", "exits"):
+            tagged.append((token, "V"))
+            continue
         if t_lower in PRONOUN_LEXICON:
             tagged.append((token, "N"))
             continue

@@ -31,7 +31,7 @@ from typing import Optional, Dict, Any, List
 
 from englisp import parser, canonicalizer, minimizer
 from englisp.loader import CURRENT_USER_TIER
-from englisp.interpreter import WorldModel, evaluate
+from englisp.interpreter import WorldModel, evaluate, evaluate_query_with_bindings
 from web import database
 
 def send_account_email(to_email: str, subject: str, text_content: str) -> bool:
@@ -139,7 +139,38 @@ def check_sexpr_depth(s: str, max_depth: int = 50) -> bool:
 # Instantiate global world state for S-expression interpreter
 world_model = WorldModel()
 
-# Initialize SQLite database on startup
+# Instantiate dedicated adventure world model for Text-Adventure minigame
+adventure_world_model = WorldModel()
+
+def init_adventure_game():
+    adventure_world_model.clear()
+    adventure_world_model.add_fact("in", ["hero", "start_room"])
+    adventure_world_model.add_fact("is_a", ["wooden_chest", "chest"])
+    adventure_world_model.add_fact("is_a", ["metal_gate", "gate"])
+    adventure_world_model.add_fact("locked", ["metal_gate"])
+    adventure_world_model.add_fact("closed", ["wooden_chest"])
+    
+    # 1. Opening the chest gives key
+    # (=> (open hero wooden_chest) (has hero key))
+    adventure_world_model.add_rule(
+        ["open", "hero", "wooden_chest"],
+        ["has", "hero", "key"]
+    )
+    # 2. Unlocking gate: has key + unlock -> unlocked
+    # (=> (and (has hero key) (unlock hero metal_gate)) (unlocked metal_gate))
+    adventure_world_model.add_rule(
+        ["and", ["has", "hero", "key"], ["unlock", "hero", "metal_gate"]],
+        ["unlocked", "metal_gate"]
+    )
+    # 3. Escaping: unlocked + exit -> escaped
+    # (=> (and (unlocked metal_gate) (exit hero start_room)) (escaped hero))
+    adventure_world_model.add_rule(
+        ["and", ["unlocked", "metal_gate"], ["exit", "hero", "start_room"]],
+        ["escaped", "hero"]
+    )
+
+init_adventure_game()
+
 @app.on_event("startup")
 def startup_event():
     database.db_init()
@@ -542,6 +573,11 @@ def api_parse(req: ParseRequest, request: Request, user: Optional[dict] = Depend
         minimalist_sexpr = minimizer.minimize_sexpr(englisp_sexpr)
         minimalist_str = canonicalizer.sexpr_to_string(minimalist_sexpr)
 
+        # Compile S-expression to Database queries (SQL / Cypher)
+        from englisp.db_compiler import compile_to_sql, compile_to_cypher
+        compiled_sql = compile_to_sql(minimalist_sexpr)
+        compiled_cypher = compile_to_cypher(minimalist_sexpr)
+
         # Auto-assert to world model if it's a valid relational fact (verb or property first)
         from englisp.interpreter import simplify_argument
         if isinstance(minimalist_sexpr, list) and len(minimalist_sexpr) > 0:
@@ -562,6 +598,8 @@ def api_parse(req: ParseRequest, request: Request, user: Optional[dict] = Depend
                 "stage2_xbar_text": xbar_text,
                 "stage3_englisp": englisp_str,
                 "stage4_minimalist": minimalist_str,
+                "compiled_sql": compiled_sql,
+                "compiled_cypher": compiled_cypher,
                 "detected_lang": lang
             }
         }
@@ -598,6 +636,11 @@ def api_generate_from_minimalist(req: MinimaLISTRequest, request: Request, user:
         xbar_text = xbar_node.pretty_print()
         generated_nl = parser.generate(xbar_node, lang=lang)
 
+        # Compile S-expression to Database queries (SQL / Cypher)
+        from englisp.db_compiler import compile_to_sql, compile_to_cypher
+        compiled_sql = compile_to_sql(min_sexpr)
+        compiled_cypher = compile_to_cypher(min_sexpr)
+
         if user:
             database.increment_user_quota(user["id"])
 
@@ -609,6 +652,8 @@ def api_generate_from_minimalist(req: MinimaLISTRequest, request: Request, user:
                 "stage2_xbar_json": xbar_json,
                 "stage2_xbar_text": xbar_text,
                 "stage1_nl": generated_nl,
+                "compiled_sql": compiled_sql,
+                "compiled_cypher": compiled_cypher,
                 "detected_lang": lang
             }
         }
@@ -638,6 +683,11 @@ def api_generate_from_englisp(req: EngLISPRequest, request: Request, user: Optio
         minimalist_sexpr = minimizer.minimize_sexpr(el_sexpr)
         minimalist_str = canonicalizer.sexpr_to_string(minimalist_sexpr)
 
+        # Compile S-expression to Database queries (SQL / Cypher)
+        from englisp.db_compiler import compile_to_sql, compile_to_cypher
+        compiled_sql = compile_to_sql(minimalist_sexpr)
+        compiled_cypher = compile_to_cypher(minimalist_sexpr)
+
         if user:
             database.increment_user_quota(user["id"])
 
@@ -649,6 +699,8 @@ def api_generate_from_englisp(req: EngLISPRequest, request: Request, user: Optio
                 "stage2_xbar_text": xbar_text,
                 "stage1_nl": generated_nl,
                 "stage4_minimalist": minimalist_str,
+                "compiled_sql": compiled_sql,
+                "compiled_cypher": compiled_cypher,
                 "detected_lang": lang
             }
         }
@@ -753,6 +805,100 @@ def compile_endpoint(req: CompileRequest, request: Request, user: Optional[dict]
         return {"success": True, "code": compiled_code}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/api/adventure/command")
+@limiter.limit("15/minute")
+def adventure_command(req: ParseRequest, request: Request):
+    text = req.text.strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="Command cannot be empty.")
+    try:
+        lang = parser.detect_language(text)
+        xbar_node = parser.parse(text, lang=lang)
+        englisp_sexpr = canonicalizer.xbar_to_sexpr(xbar_node, lang=lang)
+        minimalist_sexpr = minimizer.minimize_sexpr(englisp_sexpr)
+    except Exception as e:
+        return {
+            "success": False,
+            "message": "I didn't understand that command. Try using clear sentences like 'The hero opens the wooden_chest' or 'The hero takes the key'."
+        }
+
+    if not isinstance(minimalist_sexpr, list) or len(minimalist_sexpr) == 0:
+        return {
+            "success": False,
+            "message": "Invalid command structure."
+        }
+    
+    op = minimalist_sexpr[0]
+    if op in ("and", "or", "not", "assert", "tell", "=>"):
+        return {
+            "success": False,
+            "message": "System commands are not allowed in the adventure game."
+        }
+    
+    # Normalize operator to base forms
+    if op == "opens":
+        op = "open"
+    elif op == "unlocks":
+        op = "unlock"
+    elif op in ("exits", "exist"):
+        op = "exit"
+        
+    from englisp.interpreter import simplify_argument
+    args = [simplify_argument(x) for x in minimalist_sexpr[1:]]
+    
+    # Perform action
+    adventure_world_model.add_fact(op, args)
+    
+    # Query logic bindings
+    chest_opened = len(evaluate_query_with_bindings(["open", "hero", "wooden_chest"], adventure_world_model, [{}])) > 0
+    has_key = len(evaluate_query_with_bindings(["has", "hero", "key"], adventure_world_model, [{}])) > 0
+    gate_unlocked = len(evaluate_query_with_bindings(["unlocked", "metal_gate"], adventure_world_model, [{}])) > 0
+    escaped = len(evaluate_query_with_bindings(["escaped", "hero"], adventure_world_model, [{}])) > 0
+
+    message = ""
+    if op == "open" and len(args) > 1 and args[1] == "wooden_chest":
+        message = "You open the wooden chest. Inside, you find a golden key! You take it."
+    elif op == "unlock" and len(args) > 1 and args[1] == "metal_gate":
+        if has_key:
+            message = "You insert the golden key into the heavy iron lock of the metal gate. With a loud click, the gate unlocks!"
+        else:
+            adventure_world_model.remove_fact(op, args)
+            message = "The metal gate is locked. You need a key to unlock it."
+    elif op == "exit" and len(args) > 1 and args[1] == "start_room":
+        if gate_unlocked:
+            message = "You push open the heavy metal gate and step out of the room into the bright sunshine. You have escaped!"
+        else:
+            adventure_world_model.remove_fact(op, args)
+            message = "The metal gate is locked and blocks the exit. You cannot leave yet."
+    else:
+        message = f"You perform: {op}({', '.join(args)}). But nothing happens."
+
+    return {
+        "success": True,
+        "command_parsed": canonicalizer.sexpr_to_string(minimalist_sexpr),
+        "message": message,
+        "state": {
+            "chest_opened": chest_opened,
+            "has_key": has_key,
+            "gate_unlocked": gate_unlocked,
+            "escaped": escaped
+        }
+    }
+
+@app.post("/api/adventure/reset")
+def adventure_reset():
+    init_adventure_game()
+    return {
+        "success": True,
+        "message": "You find yourself trapped inside a dark stone room. In the corner lies a closed wooden chest. Ahead is a locked metal gate blocking the exit.",
+        "state": {
+            "chest_opened": False,
+            "has_key": False,
+            "gate_unlocked": False,
+            "escaped": False
+        }
+    }
 
 # Setup static files directory path
 static_dir = os.path.join(os.path.dirname(__file__), "static")

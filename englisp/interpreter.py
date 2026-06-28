@@ -668,6 +668,20 @@ def evaluate(expr: SExpr, model: WorldModel) -> Dict[str, Any]:
 
     op = expr[0]
     
+    # Handle logical rule directly: (=> condition consequence)
+    if op == "=>":
+        if len(expr) < 3:
+            return {"error": "Rule operator => requires condition and consequence arguments."}
+        cond = expr[1]
+        conseq = expr[2]
+        model.add_rule(cond, conseq)
+        return {
+            "type": "assertion",
+            "success": True,
+            "rule": expr,
+            "message": "Logical rule asserted successfully."
+        }
+
     # Handle top-level let binding in query/assertion
     if op == "let":
         bindings = expr[1]

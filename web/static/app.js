@@ -735,6 +735,15 @@ document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('select-lang').value = pipeline.detected_lang;
         }
         
+        const panelSql = document.getElementById('panel-db-sql');
+        const panelCypher = document.getElementById('panel-db-cypher');
+        if (panelSql && pipeline.compiled_sql) {
+            panelSql.textContent = pipeline.compiled_sql;
+        }
+        if (panelCypher && pipeline.compiled_cypher) {
+            panelCypher.textContent = pipeline.compiled_cypher;
+        }
+        
         // Render the interactive SVG tree
         renderSVGTree(pipeline.stage2_xbar_json);
         fetchCompiledCode();
@@ -750,6 +759,15 @@ document.addEventListener('DOMContentLoaded', () => {
         
         if (pipeline.detected_lang) {
             document.getElementById('select-lang').value = pipeline.detected_lang;
+        }
+        
+        const panelSql = document.getElementById('panel-db-sql');
+        const panelCypher = document.getElementById('panel-db-cypher');
+        if (panelSql && pipeline.compiled_sql) {
+            panelSql.textContent = pipeline.compiled_sql;
+        }
+        if (panelCypher && pipeline.compiled_cypher) {
+            panelCypher.textContent = pipeline.compiled_cypher;
         }
         
         // Render SVG tree
@@ -1327,6 +1345,161 @@ document.addEventListener('DOMContentLoaded', () => {
             } catch (err) {
                 appendAgentLog(`Charlie connection error.`, 'agent-charlie');
             }
+    // DB Compiler Panel Controls
+    const tabDbSql = document.getElementById('tab-db-sql');
+    const tabDbCypher = document.getElementById('tab-db-cypher');
+    const panelDbSql = document.getElementById('panel-db-sql');
+    const panelDbCypher = document.getElementById('panel-db-cypher');
+
+    if (tabDbSql && tabDbCypher) {
+        tabDbSql.addEventListener('click', () => {
+            tabDbSql.classList.add('active');
+            tabDbCypher.classList.remove('active');
+            panelDbSql.style.display = 'block';
+            panelDbCypher.style.display = 'none';
+        });
+
+        tabDbCypher.addEventListener('click', () => {
+            tabDbCypher.classList.add('active');
+            tabDbSql.classList.remove('active');
+            panelDbCypher.style.display = 'block';
+            panelDbSql.style.display = 'none';
+        });
+    }
+
+    // Text-Adventure controls
+    const adventureInput = document.getElementById('adventure-input');
+    const btnSubmitAdventure = document.getElementById('btn-submit-adventure');
+    const btnResetAdventure = document.getElementById('btn-reset-adventure');
+    const adventureConsole = document.getElementById('adventure-console');
+
+    const badgeChest = document.getElementById('badge-chest');
+    const badgeKey = document.getElementById('badge-key');
+    const badgeGate = document.getElementById('badge-gate');
+
+    function appendAdventureLog(msg, type = 'system-msg') {
+        const div = document.createElement('div');
+        div.className = `log-entry ${type}`;
+        if (type === 'player-input') {
+            div.style.color = '#38bdf8';
+            div.style.fontWeight = 'bold';
+            div.innerHTML = `&gt; ${msg}`;
+        } else if (type === 'narrative') {
+            div.style.color = '#10b981';
+            div.innerHTML = msg;
+        } else {
+            div.style.color = '#94a3b8';
+            div.innerHTML = msg;
+        }
+        adventureConsole.appendChild(div);
+        adventureConsole.scrollTop = adventureConsole.scrollHeight;
+    }
+
+    function updateAdventureBadges(state) {
+        if (!state) return;
+        
+        if (badgeChest) {
+            if (state.chest_opened) {
+                badgeChest.textContent = '📦 Chest Opened';
+                badgeChest.style.color = '#10b981';
+                badgeChest.style.borderColor = 'rgba(16,185,129,0.3)';
+                badgeChest.style.background = 'rgba(16,185,129,0.1)';
+            } else {
+                badgeChest.textContent = '📦 Chest Closed';
+                badgeChest.style.color = 'var(--text-secondary)';
+                badgeChest.style.borderColor = 'var(--glass-border)';
+                badgeChest.style.background = 'rgba(255,255,255,0.05)';
+            }
+        }
+        
+        if (badgeKey) {
+            if (state.has_key) {
+                badgeKey.textContent = '🔑 Has Key';
+                badgeKey.style.color = '#10b981';
+                badgeKey.style.borderColor = 'rgba(16,185,129,0.3)';
+                badgeKey.style.background = 'rgba(16,185,129,0.1)';
+            } else {
+                badgeKey.textContent = '🔑 No Key';
+                badgeKey.style.color = 'var(--text-secondary)';
+                badgeKey.style.borderColor = 'var(--glass-border)';
+                badgeKey.style.background = 'rgba(255,255,255,0.05)';
+            }
+        }
+        
+        if (badgeGate) {
+            if (state.gate_unlocked) {
+                badgeGate.textContent = '🚪 Gate Unlocked';
+                badgeGate.style.color = '#10b981';
+                badgeGate.style.borderColor = 'rgba(16,185,129,0.3)';
+                badgeGate.style.background = 'rgba(16,185,129,0.1)';
+            } else {
+                badgeGate.textContent = '🚪 Gate Locked';
+                badgeGate.style.color = 'var(--text-secondary)';
+                badgeGate.style.borderColor = 'var(--glass-border)';
+                badgeGate.style.background = 'rgba(255,255,255,0.05)';
+            }
+        }
+    }
+
+    async function sendAdventureCommand() {
+        const text = adventureInput.value.trim();
+        if (!text) return;
+        
+        appendAdventureLog(text, 'player-input');
+        adventureInput.value = '';
+        btnSubmitAdventure.disabled = true;
+        
+        try {
+            const response = await apiFetch('/api/adventure/command', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text })
+            });
+            const data = await response.json();
+            if (response.ok) {
+                if (data.success) {
+                    appendAdventureLog(data.message, 'narrative');
+                    updateAdventureBadges(data.state);
+                    if (data.state.escaped) {
+                        appendAdventureLog('🎉 YOU ESCAPED THE CHAMBER! CONGRATULATIONS!', 'narrative');
+                    }
+                } else {
+                    appendAdventureLog(data.message, 'error-msg');
+                }
+            } else {
+                appendAdventureLog(data.detail || 'Error sending command.', 'error-msg');
+            }
+        } catch (err) {
+            appendAdventureLog('Could not connect to the adventure server.', 'error-msg');
+        } finally {
+            btnSubmitAdventure.disabled = false;
+        }
+    }
+
+    async function resetAdventureGame() {
+        try {
+            const response = await apiFetch('/api/adventure/reset', { method: 'POST' });
+            const data = await response.json();
+            if (response.ok && data.success) {
+                adventureConsole.innerHTML = '';
+                appendAdventureLog(data.message, 'narrative');
+                updateAdventureBadges(data.state);
+            }
+        } catch (err) {
+            appendAdventureLog('Failed to reset the game.', 'error-msg');
+        }
+    }
+
+    if (btnSubmitAdventure && btnResetAdventure) {
+        btnSubmitAdventure.addEventListener('click', sendAdventureCommand);
+        adventureInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') sendAdventureCommand();
+        });
+        btnResetAdventure.addEventListener('click', resetAdventureGame);
+        
+        // Initial setup
+        resetAdventureGame();
+    }
         }
     }
 });
