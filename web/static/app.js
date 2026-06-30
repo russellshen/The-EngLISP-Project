@@ -17,13 +17,17 @@ document.addEventListener('DOMContentLoaded', () => {
     // ==========================================
     // API FETCH WRAPPER WITH AUTHENTICATION
     // ==========================================
+    const API_BASE_URL = window.ENG_LISP_API_URL || localStorage.getItem('englisp_api_base_url') || '';
+    let stripeEnabled = false;
+
     async function apiFetch(url, options = {}) {
         options.headers = options.headers || {};
         const apiKey = localStorage.getItem('englisp_api_key');
         if (apiKey) {
             options.headers['X-API-Key'] = apiKey;
         }
-        return fetch(url, options);
+        const targetUrl = url.startsWith('/') ? `${API_BASE_URL}${url}` : url;
+        return fetch(targetUrl, options);
     }
 
     // Auth elements
@@ -60,6 +64,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function updateAccountUI(user) {
         const badgeLexicon = document.getElementById('badge-lexicon-status');
         if (user) {
+            stripeEnabled = !!user.stripe_enabled;
             viewLoggedOut.style.display = 'none';
             viewLoggedIn.style.display = 'block';
             
@@ -134,17 +139,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function checkAuthStatus() {
         const apiKey = localStorage.getItem('englisp_api_key');
-        if (!apiKey) {
-            updateAccountUI(null);
-            return;
-        }
         try {
-            const res = await fetch('/api/auth/me', {
-                headers: { 'X-API-Key': apiKey }
-            });
+            const options = {};
+            if (apiKey) {
+                options.headers = { 'X-API-Key': apiKey };
+            }
+            const res = await apiFetch('/api/auth/me', options);
             if (res.ok) {
                 const user = await res.json();
-                updateAccountUI(user);
+                stripeEnabled = !!user.stripe_enabled;
+                if (user.authenticated) {
+                    updateAccountUI(user);
+                } else {
+                    updateAccountUI(null);
+                }
             } else {
                 localStorage.removeItem('englisp_api_key');
                 updateAccountUI(null);
@@ -226,7 +234,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         btnAuthSubmit.disabled = true;
         try {
-            const response = await fetch(endpoint, {
+            const response = await apiFetch(endpoint, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ email, password })
@@ -262,7 +270,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const email = forgotEmail.value.trim();
         btnForgotSubmit.disabled = true;
         try {
-            const res = await fetch('/api/auth/forgot-password', {
+            const res = await apiFetch('/api/auth/forgot-password', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ email })
@@ -296,7 +304,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         btnResetSubmit.disabled = true;
         try {
-            const res = await fetch('/api/auth/reset-password', {
+            const res = await apiFetch('/api/auth/reset-password', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ email, passcode, new_password })
@@ -330,6 +338,26 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!apiKey) return;
         
         const isCurrentlyPaid = btnToggleSubscription.textContent.includes('Cancel');
+        
+        if (!isCurrentlyPaid && stripeEnabled) {
+            btnToggleSubscription.disabled = true;
+            try {
+                const res = await apiFetch('/api/auth/stripe-checkout', { method: 'POST' });
+                const data = await res.json();
+                if (res.ok && data.success) {
+                    showToast('Redirecting to Stripe Checkout...', 'success');
+                    window.location.href = data.checkout_url;
+                } else {
+                    showToast(data.detail || 'Failed to create checkout session.', 'error');
+                }
+            } catch (e) {
+                showToast('Failed to connect to billing server.', 'error');
+            } finally {
+                btnToggleSubscription.disabled = false;
+            }
+            return;
+        }
+        
         const duration = isCurrentlyPaid ? 0 : 2592000;
         
         btnToggleSubscription.disabled = true;

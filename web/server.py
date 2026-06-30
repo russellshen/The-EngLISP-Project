@@ -33,6 +33,15 @@ from englisp import parser, canonicalizer, minimizer
 from englisp.loader import CURRENT_USER_TIER
 from englisp.interpreter import WorldModel, evaluate, evaluate_query_with_bindings
 from web import database
+import stripe
+from datetime import timezone
+
+STRIPE_SECRET_KEY = os.environ.get("STRIPE_SECRET_KEY")
+STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET")
+STRIPE_PRICE_ID = os.environ.get("STRIPE_PRICE_ID", "price_12345_mock")
+
+if STRIPE_SECRET_KEY:
+    stripe.api_key = STRIPE_SECRET_KEY
 
 def send_account_email(to_email: str, subject: str, text_content: str) -> bool:
     """Dispatches account emails using SMTP if configured, otherwise logs to a file."""
@@ -121,9 +130,12 @@ def custom_rate_limit_handler(request: Request, exc: RateLimitExceeded) -> JSONR
 app.add_exception_handler(RateLimitExceeded, custom_rate_limit_handler)
 app.add_middleware(SlowAPIMiddleware)
 
+origins_env = os.environ.get("ALLOWED_ORIGINS", "*")
+origins = [o.strip() for o in origins_env.split(",") if o.strip()] if origins_env != "*" else ["*"]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=origins,
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -452,12 +464,14 @@ def api_login(req: AuthRequest, request: Request):
 @app.get("/api/auth/me")
 @limiter.limit("10/minute", key_func=get_remote_address)
 def api_me(request: Request, user: Optional[dict] = Depends(get_auth_user)):
+    stripe_enabled = bool(STRIPE_SECRET_KEY)
     if not user:
         return {
             "authenticated": False,
             "tier": "anonymous_sandbox",
             "quota_limit": 5,
             "quota_used": 0,
+            "stripe_enabled": stripe_enabled,
             "message": "Browsing under Anonymous Sandbox rate limits."
         }
     return {
@@ -468,7 +482,8 @@ def api_me(request: Request, user: Optional[dict] = Depends(get_auth_user)):
         "quota_used": user["quota_used"],
         "api_key": user["api_key"],
         "subscription_expires_at": user.get("subscription_expires_at"),
-        "status": user.get("status")
+        "status": user.get("status"),
+        "stripe_enabled": stripe_enabled
     }
 
 @app.post("/api/auth/subscribe")
@@ -477,6 +492,12 @@ def api_subscribe(req: SubscribeRequest, request: Request, user: Optional[dict] 
     if not user:
         raise HTTPException(status_code=401, detail="Authentication required to subscribe.")
     
+    if STRIPE_SECRET_KEY:
+        raise HTTPException(
+            status_code=400,
+            detail="Direct subscription upgrades are disabled. Please use the checkout session redirection endpoint (/api/auth/stripe-checkout) to subscribe."
+        )
+        
     if req.duration_seconds <= 0:
         updated_user = database.downgrade_user_subscription(user["email"])
         msg = "Subscription cancelled successfully."
@@ -494,6 +515,93 @@ def api_subscribe(req: SubscribeRequest, request: Request, user: Optional[dict] 
         "subscription_expires_at": updated_user["subscription_expires_at"],
         "status": updated_user["status"]
     }
+
+@app.post("/api/auth/stripe-checkout")
+@limiter.limit("5/minute", key_func=get_remote_address)
+def api_stripe_checkout(request: Request, user: Optional[dict] = Depends(get_auth_user)):
+    if not user:
+        raise HTTPException(status_code=401, detail="Authentication required to upgrade.")
+    if not STRIPE_SECRET_KEY:
+        raise HTTPException(status_code=400, detail="Stripe integration is disabled on this server.")
+        
+    try:
+        customer_id = user.get("stripe_customer_id")
+        if not customer_id:
+            customer = stripe.Customer.create(
+                email=user["email"],
+                metadata={"user_id": user["id"]}
+            )
+            customer_id = customer.id
+            database.assign_stripe_customer_to_user(user["email"], customer_id)
+            
+        referrer = request.headers.get("referer")
+        origin = referrer if referrer else str(request.base_url)
+        
+        session = stripe.checkout.Session.create(
+            customer=customer_id,
+            payment_method_types=['card'],
+            line_items=[{
+                'price': STRIPE_PRICE_ID,
+                'quantity': 1,
+            }],
+            mode='subscription',
+            success_url=origin + "?session_id={CHECKOUT_SESSION_ID}",
+            cancel_url=origin,
+        )
+        return {"success": True, "checkout_url": session.url}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/stripe/webhook")
+async def stripe_webhook(request: Request):
+    if not STRIPE_SECRET_KEY or not STRIPE_WEBHOOK_SECRET:
+        raise HTTPException(status_code=400, detail="Stripe webhooks are disabled.")
+        
+    payload = await request.body()
+    sig_header = request.headers.get("stripe-signature")
+    
+    try:
+        event = stripe.Webhook.construct_event(
+            payload, sig_header, STRIPE_WEBHOOK_SECRET
+        )
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid payload")
+    except stripe.error.SignatureVerificationError:
+        raise HTTPException(status_code=400, detail="Invalid signature")
+        
+    event_type = event["type"]
+    if event_type == "checkout.session.completed":
+        session = event["data"]["object"]
+        customer_id = session.get("customer")
+        subscription_id = session.get("subscription")
+        
+        try:
+            sub = stripe.Subscription.retrieve(subscription_id)
+            expires_at = datetime.fromtimestamp(sub.current_period_end, tz=timezone.utc).replace(tzinfo=None).isoformat()
+        except Exception:
+            expires_at = (datetime.utcnow() + timedelta(days=30)).isoformat()
+            
+        database.activate_user_subscription_by_stripe(customer_id, subscription_id, expires_at)
+        
+    elif event_type in ("customer.subscription.deleted", "customer.subscription.updated"):
+        subscription = event["data"]["object"]
+        status_str = subscription.get("status")
+        sub_id = subscription.get("id")
+        
+        if status_str in ("canceled", "unpaid", "incomplete_expired"):
+            database.cancel_user_subscription_by_stripe(sub_id)
+        elif event_type == "customer.subscription.updated":
+            expires_at = datetime.fromtimestamp(subscription.get("current_period_end"), tz=timezone.utc).replace(tzinfo=None).isoformat()
+            conn = database.get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute(
+                "UPDATE users SET subscription_expires_at = ? WHERE stripe_subscription_id = ?",
+                (expires_at, sub_id)
+            )
+            conn.commit()
+            conn.close()
+            
+    return {"status": "success"}
 
 @app.post("/api/auth/change-password")
 @limiter.limit("10/minute", key_func=get_remote_address)

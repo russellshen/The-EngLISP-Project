@@ -24,7 +24,11 @@ import secrets
 from datetime import datetime
 from typing import Optional
 
-DB_PATH = os.path.join(os.path.dirname(__file__), "users.db")
+DB_PATH = os.environ.get("DATABASE_PATH", os.path.join(os.path.dirname(__file__), "users.db"))
+# Ensure parent directory exists for DB path
+db_dir = os.path.dirname(os.path.abspath(DB_PATH))
+if db_dir:
+    os.makedirs(db_dir, exist_ok=True)
 
 def get_db_connection():
     conn = sqlite3.connect(DB_PATH)
@@ -68,6 +72,10 @@ def db_init():
         cursor.execute("ALTER TABLE users ADD COLUMN reset_token TEXT")
     if "reset_token_expires_at" not in columns:
         cursor.execute("ALTER TABLE users ADD COLUMN reset_token_expires_at TEXT")
+    if "stripe_customer_id" not in columns:
+        cursor.execute("ALTER TABLE users ADD COLUMN stripe_customer_id TEXT")
+    if "stripe_subscription_id" not in columns:
+        cursor.execute("ALTER TABLE users ADD COLUMN stripe_subscription_id TEXT")
         
     conn.commit()
     
@@ -269,5 +277,57 @@ def reset_user_password_by_token(email: str, token: str, new_password_hash: str)
         return cursor.rowcount > 0
     except Exception:
         return False
+    finally:
+        conn.close()
+
+def assign_stripe_customer_to_user(email: str, customer_id: str) -> bool:
+    """Stores the Stripe Customer ID for a user."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            "UPDATE users SET stripe_customer_id = ? WHERE email = ?",
+            (customer_id, email.lower().strip())
+        )
+        conn.commit()
+        return cursor.rowcount > 0
+    except Exception:
+        return False
+    finally:
+        conn.close()
+
+def activate_user_subscription_by_stripe(customer_id: str, subscription_id: str, expires_at: str) -> Optional[dict]:
+    """Activates paid tier for a user matching Stripe Customer ID, and stores subscription details."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            "UPDATE users SET tier = 'paid', status = 'active', quota_limit = 10000, stripe_subscription_id = ?, subscription_expires_at = ? WHERE stripe_customer_id = ?",
+            (subscription_id, expires_at, customer_id)
+        )
+        conn.commit()
+        cursor.execute("SELECT * FROM users WHERE stripe_customer_id = ?", (customer_id,))
+        row = cursor.fetchone()
+        return dict(row) if row else None
+    except Exception:
+        return None
+    finally:
+        conn.close()
+
+def cancel_user_subscription_by_stripe(subscription_id: str) -> Optional[dict]:
+    """Downgrades user back to free tier matching Stripe Subscription ID."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            "UPDATE users SET tier = 'free', status = 'expired', quota_limit = 100, subscription_expires_at = NULL WHERE stripe_subscription_id = ?",
+            (subscription_id,)
+        )
+        conn.commit()
+        cursor.execute("SELECT * FROM users WHERE stripe_subscription_id = ?", (subscription_id,))
+        row = cursor.fetchone()
+        return dict(row) if row else None
+    except Exception:
+        return None
     finally:
         conn.close()
