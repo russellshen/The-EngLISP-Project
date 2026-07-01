@@ -52,9 +52,10 @@ def send_account_email(to_email: str, subject: str, text_content: str) -> bool:
     
     if smtp_host and smtp_user and smtp_pass:
         try:
+            smtp_from = os.environ.get("SMTP_FROM_EMAIL", "no-reply@yourdomain.com")
             msg = MIMEText(text_content)
             msg['Subject'] = subject
-            msg['From'] = smtp_user
+            msg['From'] = smtp_from
             msg['To'] = to_email
             
             with smtplib.SMTP(smtp_host, int(smtp_port)) as server:
