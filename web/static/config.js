@@ -6,4 +6,4 @@
 //
 // Leave as an empty string ("") if the backend server is hosting 
 // the static files directly (relative paths will be used).
-window.ENG_LISP_API_URL = "";
+window.ENG_LISP_API_URL = "https://api.englisp.com";
