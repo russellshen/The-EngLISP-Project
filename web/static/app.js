@@ -19,6 +19,8 @@ document.addEventListener('DOMContentLoaded', () => {
     // ==========================================
     const API_BASE_URL = window.ENG_LISP_API_URL || localStorage.getItem('englisp_api_base_url') || '';
     let stripeEnabled = false;
+    let isAuthenticated = false;
+    let lastXBarJson = null;
 
     async function apiFetch(url, options = {}) {
         options.headers = options.headers || {};
@@ -63,6 +65,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function updateAccountUI(user) {
         const badgeLexicon = document.getElementById('badge-lexicon-status');
+        isAuthenticated = !!user;
         if (user) {
             stripeEnabled = !!user.stripe_enabled;
             viewLoggedOut.style.display = 'none';
@@ -474,9 +477,8 @@ document.addEventListener('DOMContentLoaded', () => {
         value: '; Waiting for input...'
     });
 
-    // Parenthesis Matching Real-time Validator
-    let toastTimeout = null;
-    function checkParentheses(editor, container) {
+    // Parenthesis Matching Validator
+    function checkParentheses(editor, container, showToastAlert = false) {
         const val = editor.getValue();
         let openCount = 0;
         let closeCount = 0;
@@ -486,22 +488,23 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         if (openCount !== closeCount) {
             container.classList.add('error-glow');
-            if (toastTimeout) clearTimeout(toastTimeout);
-            toastTimeout = setTimeout(() => {
+            if (showToastAlert) {
                 showToast(`Parentheses mismatch! (${openCount} open, ${closeCount} closed)`, 'error');
-            }, 1200);
+            }
+            return false;
         } else {
             container.classList.remove('error-glow');
+            return true;
         }
     }
 
     editorEnglisp.on('change', () => {
-        checkParentheses(editorEnglisp, containerEnglisp);
+        checkParentheses(editorEnglisp, containerEnglisp, false);
         fetchCompiledCode();
     });
 
     editorMinimalist.on('change', () => {
-        checkParentheses(editorMinimalist, containerMinimalist);
+        checkParentheses(editorMinimalist, containerMinimalist, false);
     });
 
     // Sample Buttons
@@ -519,6 +522,9 @@ document.addEventListener('DOMContentLoaded', () => {
         tabText.classList.remove('active');
         xbarVisualContainer.classList.remove('hidden');
         xbarTreeText.classList.add('hidden');
+        if (lastXBarJson) {
+            renderSVGTree(lastXBarJson);
+        }
     });
 
     tabText.addEventListener('click', () => {
@@ -528,16 +534,29 @@ document.addEventListener('DOMContentLoaded', () => {
         xbarTreeText.classList.remove('hidden');
     });
 
+    // Re-render SVG on window resize (debounced)
+    let resizeTimeout;
+    window.addEventListener('resize', () => {
+        clearTimeout(resizeTimeout);
+        resizeTimeout = setTimeout(() => {
+            if (lastXBarJson && !xbarVisualContainer.classList.contains('hidden')) {
+                renderSVGTree(lastXBarJson);
+            }
+        }, 200);
+    });
+
     // Pipeline Action Listeners
     btnParseNl.addEventListener('click', () => {
         triggerForwardPipeline(inputNl.value);
     });
 
     btnGenEnglisp.addEventListener('click', () => {
+        if (!checkParentheses(editorEnglisp, containerEnglisp, true)) return;
         triggerReversePipelineFromEngLISP(editorEnglisp.getValue());
     });
 
     btnGenMinimalist.addEventListener('click', () => {
+        if (!checkParentheses(editorMinimalist, containerMinimalist, true)) return;
         triggerReversePipelineFromMinimalist(editorMinimalist.getValue());
     });
 
@@ -885,6 +904,8 @@ document.addEventListener('DOMContentLoaded', () => {
     function renderSVGTree(rootNode) {
         xbarSvg.innerHTML = '';
         if (!rootNode) return;
+        
+        lastXBarJson = rootNode;
 
         let leavesCount = 0;
         function assignCoordinates(node, depth) {
@@ -900,11 +921,17 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         assignCoordinates(rootNode, 0);
 
-        const width = xbarVisualContainer.clientWidth || 800;
+        const containerWidth = xbarVisualContainer.clientWidth || 800;
         const height = 450;
         const topMargin = 40;
         const bottomMargin = 60;
         const sideMargin = 45;
+        
+        // Dynamic horizontal layout logic: ensure at least 85px horizontal spacing per leaf node.
+        // Scroll horizontally if width exceeds container.
+        const width = Math.max(containerWidth, leavesCount * 85 + 90);
+        xbarSvg.setAttribute('width', width);
+        xbarSvg.style.width = width + 'px';
         
         const verticalSpacing = (height - topMargin - bottomMargin) / (getMaxDepth(rootNode) || 1);
         const horizontalSpacing = (width - sideMargin * 2) / Math.max(1, leavesCount - 1);
@@ -1047,6 +1074,21 @@ document.addEventListener('DOMContentLoaded', () => {
         cmd = cmd.trim();
         if (!cmd) return;
 
+        // Parentheses matching validation
+        let openCount = 0;
+        let closeCount = 0;
+        for (let char of cmd) {
+            if (char === '(') openCount++;
+            else if (char === ')') closeCount++;
+        }
+        if (openCount !== closeCount) {
+            appendConsoleLog(cmd, 'user-cmd');
+            appendConsoleLog(`Parentheses mismatch! (${openCount} open, ${closeCount} closed)`, 'error-msg');
+            showToast(`Parentheses mismatch! (${openCount} open, ${closeCount} closed)`, 'error');
+            consoleInput.value = '';
+            return;
+        }
+
         appendConsoleLog(cmd, 'user-cmd');
         consoleInput.value = '';
 
@@ -1188,6 +1230,10 @@ document.addEventListener('DOMContentLoaded', () => {
             btnToggleSim.classList.remove('primary-btn');
             btnToggleSim.classList.add('accent-btn');
             appendAgentLog('Simulation started.', 'system-msg');
+            
+            if (!isAuthenticated) {
+                showToast('Running simulation as guest. Sandbox queries are rate-limited to 5 requests/minute. Log in or sign up to run full-speed agents!', 'info');
+            }
         }
     });
 

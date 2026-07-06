@@ -254,17 +254,26 @@ body {
     box-shadow: 0 0 8px rgba(6, 182, 212, 0.25);
 }
 
+textarea.text-input {
+    min-height: 100px;
+    resize: vertical;
+    padding: 1rem;
+    border-radius: 12px;
+}
+
+input.text-input {
+    height: 42px;
+    padding: 0.6rem 1rem;
+    border-radius: 8px;
+}
+
 .text-input {
     width: 100%;
-    min-height: 100px;
     background: rgba(0, 0, 0, 0.25);
     border: 1px solid var(--glass-border);
-    border-radius: 12px;
-    padding: 1rem;
     color: var(--text-primary);
     font-family: var(--font-body);
     font-size: 1rem;
-    resize: vertical;
     outline: none;
     transition: var(--transition-smooth);
 }
@@ -720,6 +729,12 @@ body {
     background: rgba(16, 185, 129, 0.2);
     border-color: rgba(16, 185, 129, 0.4);
     color: #a7f3d0;
+}
+
+.toast.info {
+    background: rgba(6, 182, 212, 0.2);
+    border-color: rgba(6, 182, 212, 0.4);
+    color: #a5f3fc;
 }
 
 .toast-close {
