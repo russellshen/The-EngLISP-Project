@@ -393,6 +393,15 @@
                 </ul>
             </div>
         </footer>
+
+        <!-- Legal & Copyright Footer -->
+        <footer style="margin-top: 2rem; border-top: 1px solid var(--glass-border); padding-top: 1rem; display: flex; justify-content: space-between; font-size: 0.8rem; color: var(--text-secondary); width: 100%;">
+            <span>&copy; 2026 EngLISP. All rights reserved.</span>
+            <div>
+                <a href="#" id="link-terms" style="color: var(--accent-cyan); text-decoration: none; margin-right: 15px; cursor: pointer;">Terms of Service</a>
+                <a href="#" id="link-privacy" style="color: var(--accent-cyan); text-decoration: none; cursor: pointer;">Privacy Policy</a>
+            </div>
+        </footer>
     </div>
     
     <!-- User Account Modal -->
@@ -496,9 +505,38 @@
                     </div>
                     
                     <div class="subscription-section" style="margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--glass-border);">
-                        <h4 class="card-title" style="font-size: 1rem; margin-bottom: 0.5rem;">Mock Subscription Plan</h4>
-                        <p class="card-desc" style="font-size: 0.8rem; margin-bottom: 0.8rem;">Access the full-scale private databases containing 100k+ WordNet vocabulary items.</p>
-                        <button id="btn-toggle-subscription" class="action-btn primary-btn" style="width: 100%; margin-top: 0;">
+                        <h4 class="card-title" style="font-size: 1.0rem; margin-bottom: 0.5rem;">Subscription Access Plan</h4>
+                        <p class="card-desc" style="font-size: 0.8rem; margin-bottom: 0.8rem;">Access the full-scale private databases containing 100k+ WordNet and BabelNet vocabulary items.</p>
+                        
+                        <!-- Tier Comparison Table -->
+                        <table style="width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 0.75rem; border: 1px solid var(--glass-border); background: rgba(0,0,0,0.2); border-radius: 6px; overflow: hidden; text-align: left;">
+                            <thead>
+                                <tr style="background: rgba(255,255,255,0.05); border-bottom: 1px solid var(--glass-border);">
+                                    <th style="padding: 6px 8px;">Feature</th>
+                                    <th style="padding: 6px 8px;">Free Tier</th>
+                                    <th style="padding: 6px 8px; color: var(--accent-cyan);">Paid Tier</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
+                                    <td style="padding: 6px 8px; font-weight: 500;">Vocabulary</td>
+                                    <td style="padding: 6px 8px; color: var(--text-secondary);">Sample (100 words)</td>
+                                    <td style="padding: 6px 8px; color: #10b981; font-weight: bold;">Full (100k+ entries)</td>
+                                </tr>
+                                <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
+                                    <td style="padding: 6px 8px; font-weight: 500;">Monthly Limit</td>
+                                    <td style="padding: 6px 8px; color: var(--text-secondary);">100 queries</td>
+                                    <td style="padding: 6px 8px; color: #10b981;">10,000 queries</td>
+                                </tr>
+                                <tr>
+                                    <td style="padding: 6px 8px; font-weight: 500;">API Access</td>
+                                    <td style="padding: 6px 8px; color: var(--text-secondary);">Playground Only</td>
+                                    <td style="padding: 6px 8px; color: #10b981;">Playground & API Keys</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                        
+                        <button id="btn-toggle-subscription" class="action-btn primary-btn" style="width: 100%; margin-top: 0.5rem;">
                             <span>Upgrade to Paid Tier</span>
                         </button>
                     </div>
@@ -523,6 +561,46 @@
                     </button>
                 </div>
                 
+            </div>
+        </div>
+    </div>
+
+    <!-- Terms of Service Modal -->
+    <div id="modal-terms" class="modal-overlay">
+        <div class="modal-content card" style="max-width: 600px; max-height: 80vh; overflow-y: auto;">
+            <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+                <h3 class="card-title">Terms of Service</h3>
+                <button id="btn-close-terms" class="modal-close-btn">&times;</button>
+            </div>
+            <div class="card-body" style="font-size: 0.9rem; line-height: 1.5; color: var(--text-light); text-align: left; display: flex; flex-direction: column; gap: 1rem; padding: 1.2rem;">
+                <p>Welcome to EngLISP. By using our website and services, you agree to comply with and be bound by the following terms of service.</p>
+                <h4 style="margin-top: 0.5rem; color: var(--accent-cyan);">1. Use of Service</h4>
+                <p>EngLISP provides natural language translation and query parsing tools. You agree to use the service only for lawful purposes and in accordance with these terms.</p>
+                <h4 style="margin-top: 0.5rem; color: var(--accent-cyan);">2. Subscriptions & Billing</h4>
+                <p>Our paid subscriptions grant access to full lexical databases. Payments are handled securely via Stripe. Subscriptions renew automatically monthly. You can cancel your subscription at any time through the account portal.</p>
+                <h4 style="margin-top: 0.5rem; color: var(--accent-cyan);">3. Intellectual Property</h4>
+                <p>All core parsing, canonicalization logic, and proprietary dictionary assets are owned by Russell Shen. Commercial use of the private dictionaries is strictly prohibited under the CC-BY-NC-ND-4.0 license.</p>
+                <h4 style="margin-top: 0.5rem; color: var(--accent-cyan);">4. Limitation of Liability</h4>
+                <p>EngLISP is provided "as is" without warranties of any kind. We are not liable for any damages resulting from your use of the service.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Privacy Policy Modal -->
+    <div id="modal-privacy" class="modal-overlay">
+        <div class="modal-content card" style="max-width: 600px; max-height: 80vh; overflow-y: auto;">
+            <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+                <h3 class="card-title">Privacy Policy</h3>
+                <button id="btn-close-privacy" class="modal-close-btn">&times;</button>
+            </div>
+            <div class="card-body" style="font-size: 0.9rem; line-height: 1.5; color: var(--text-light); text-align: left; display: flex; flex-direction: column; gap: 1rem; padding: 1.2rem;">
+                <p>Your privacy is important to us. This policy describes how we collect, use, and handle your information.</p>
+                <h4 style="margin-top: 0.5rem; color: var(--accent-cyan);">1. Information We Collect</h4>
+                <p>We collect your email address and credentials when you register. We do not store or process payment card details directly; all payments are handled securely by Stripe.</p>
+                <h4 style="margin-top: 0.5rem; color: var(--accent-cyan);">2. API Log Data</h4>
+                <p>To monitor quotas and prevent abuse, we log the usage count of your authenticated API keys. We do not inspect or store the contents of your natural language parses except for runtime processing.</p>
+                <h4 style="margin-top: 0.5rem; color: var(--accent-cyan);">3. Third-Party Disclosures</h4>
+                <p>We do not sell, trade, or otherwise transfer your personal information to outside parties, except for trusted services like Stripe (payment processing) and Resend (email delivery) necessary to run the service.</p>
             </div>
         </div>
     </div>

@@ -150,11 +150,26 @@ pip install git+https://github.com/russellshen/The-EngLISP-Project.git
     pip install -e .[dev]
     ```
 
-### Lexical Databases & Fallback Samples
+### Lexical Databases, Fallback Samples, & Subscriptions
 
 *   **Public Fallback Samples**: This repository comes bundled with lightweight fallback sample datasets (`sample_*.lson` files under `englisp/resources/`). These allow the entire parsing, generation, compilation, and interpretation pipeline to compile, run tests, and execute out of the box for testing and sample inputs.
 *   **Full Production Database**: The full-scale multilingual database (containing 254 partition files mapping over 100,000 nouns, verbs, adjectives, grammatical genders, and translations linked to BabelNet and WordNet synsets) is kept in a separate private repository to protect the project's data IP and commercial viability.
 *   **Requesting Access**: If you are an academic researcher, open-source contributor, or commercial partner interested in utilizing the full-scale dictionaries or licensing the dataset, please reach out directly via the **Commercial Licensing & Contact** section below.
+
+#### Subscription Access Tiers
+
+To support the hosting of the high-performance API server and continuous dataset curation, EngLISP utilizes a two-tier subscription access structure:
+
+| Feature / Quota | Free Tier | Paid Subscription Tier |
+| :--- | :--- | :--- |
+| **Pricing** | $0/month | $5/month (or equivalent currency) |
+| **Lexical Corpus** | Public Fallback Samples (approx. 100 items) | Full-Scale Production Database (100k+ entries) |
+| **API Rate Limit** | 100 parse/compile queries per month | 10,000 parse/compile queries per month |
+| **Access Method** | Web Playground GUI only | Web Playground GUI + Authenticated REST API Keys |
+| **Commercial Use** | Not Permitted (Academic/Testing Only) | Permitted under commercial agreements |
+
+**Explanation**: 
+The **Free Tier** allows researchers and developers to test the parser, experiment with syntax trees, and evaluate compile transformations. However, since large-scale chart-parsing queries consume significant memory and computation on the bridge server, the **Paid Subscription Tier** unlocks high-capacity API rate limits and loads the complete WordNet/BabelNet disambiguated dictionaries into memory.
 
 ---
 

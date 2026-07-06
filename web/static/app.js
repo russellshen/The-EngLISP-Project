@@ -1531,4 +1531,34 @@ document.addEventListener('DOMContentLoaded', () => {
         // Initial setup
         resetAdventureGame();
     }
+
+    // Legal Modal Listeners
+    const linkTerms = document.getElementById('link-terms');
+    const linkPrivacy = document.getElementById('link-privacy');
+    const modalTerms = document.getElementById('modal-terms');
+    const modalPrivacy = document.getElementById('modal-privacy');
+    const btnCloseTerms = document.getElementById('btn-close-terms');
+    const btnClosePrivacy = document.getElementById('btn-close-privacy');
+    
+    if (linkTerms && modalTerms && btnCloseTerms) {
+        linkTerms.addEventListener('click', (e) => {
+            e.preventDefault();
+            modalTerms.classList.add('active');
+        });
+        btnCloseTerms.addEventListener('click', () => modalTerms.classList.remove('active'));
+        modalTerms.addEventListener('click', (e) => {
+            if (e.target === modalTerms) modalTerms.classList.remove('active');
+        });
+    }
+    
+    if (linkPrivacy && modalPrivacy && btnClosePrivacy) {
+        linkPrivacy.addEventListener('click', (e) => {
+            e.preventDefault();
+            modalPrivacy.classList.add('active');
+        });
+        btnClosePrivacy.addEventListener('click', () => modalPrivacy.classList.remove('active'));
+        modalPrivacy.addEventListener('click', (e) => {
+            if (e.target === modalPrivacy) modalPrivacy.classList.remove('active');
+        });
+    }
 });

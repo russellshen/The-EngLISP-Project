@@ -82,7 +82,16 @@ def db_init():
     # Bootstrap default admin account if not exists
     cursor.execute("SELECT * FROM users WHERE email = ?", ("admin@englisp.com",))
     if not cursor.fetchone():
-        admin_pass_hash = hash_password("adminpassword123")
+        admin_password = os.environ.get("ADMIN_PASSWORD")
+        if not admin_password:
+            import sys
+            if "pytest" in sys.modules:
+                admin_password = "adminpassword123"
+            else:
+                import secrets
+                admin_password = "admin_" + secrets.token_urlsafe(16)
+                print(f"\n[SECURITY WARNING] ADMIN_PASSWORD environment variable not set. Generated temporary secure admin password: {admin_password}\n")
+        admin_pass_hash = hash_password(admin_password)
         admin_key = generate_api_key()
         created_at = datetime.utcnow().isoformat()
         cursor.execute(
