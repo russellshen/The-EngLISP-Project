@@ -23,17 +23,17 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy the project files into the container
 COPY . /app/
 
-# Accept GitHub Token as a build argument for private assets injection
-ARG GITHUB_TOKEN
+# Accept Private Assets Token as a build argument for private assets injection
+ARG PRIVATE_ASSETS_TOKEN
 
-# Conditionally clone private dictionary resources if GITHUB_TOKEN is supplied
-RUN if [ -n "$GITHUB_TOKEN" ]; then \
-        echo "GITHUB_TOKEN detected. Cloned private resources will be integrated."; \
-        git clone https://${GITHUB_TOKEN}@github.com/russellshen/The-EngLISP-Project-Assets.git /tmp/assets && \
+# Conditionally clone private dictionary resources if PRIVATE_ASSETS_TOKEN is supplied
+RUN if [ -z "$PRIVATE_ASSETS_TOKEN" ]; then \
+        echo "WARNING: PRIVATE_ASSETS_TOKEN build argument is absent. Falling back to public sample dictionary assets."; \
+    else \
+        echo "PRIVATE_ASSETS_TOKEN detected. Cloned private resources will be integrated."; \
+        git clone https://${PRIVATE_ASSETS_TOKEN}@github.com/russellshen/The-EngLISP-Project-Assets.git /tmp/assets && \
         cp /tmp/assets/resources/*.lson /app/englisp/resources/ && \
         rm -rf /tmp/assets; \
-    else \
-        echo "WARNING: GITHUB_TOKEN build argument is absent. Falling back to public sample dictionary assets."; \
     fi
 
 # Expose port 8000 for the FastAPI server

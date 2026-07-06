@@ -8,11 +8,16 @@ $ErrorActionPreference = "Stop"
 Write-Host "==================================================" -ForegroundColor Cyan
 Write-Host "1. Building local Docker image (englisp-server)..." -ForegroundColor Cyan
 Write-Host "==================================================" -ForegroundColor Cyan
-if ($env:GITHUB_TOKEN) {
-    Write-Host "Found local GITHUB_TOKEN environment variable. Injecting into build..." -ForegroundColor Yellow
-    docker build --build-arg GITHUB_TOKEN=$env:GITHUB_TOKEN -t englisp-server .
+$token = $env:PRIVATE_ASSETS_TOKEN
+if (-not $token) {
+    $token = $env:GITHUB_TOKEN
+}
+
+if ($token) {
+    Write-Host "Found build token. Injecting into build..." -ForegroundColor Yellow
+    docker build --build-arg PRIVATE_ASSETS_TOKEN=$token -t englisp-server .
 } else {
-    Write-Host "No GITHUB_TOKEN environment variable found. Building with fallback sample dictionary assets..." -ForegroundColor Yellow
+    Write-Host "No build token found. Building with fallback sample dictionary assets..." -ForegroundColor Yellow
     docker build -t englisp-server .
 }
 
