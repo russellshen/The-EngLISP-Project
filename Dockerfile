@@ -11,6 +11,7 @@ WORKDIR /app
 # Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
+    git \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy the requirements file into the container
@@ -22,8 +23,22 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy the project files into the container
 COPY . /app/
 
+# Accept GitHub Token as a build argument for private assets injection
+ARG GITHUB_TOKEN
+
+# Conditionally clone private dictionary resources if GITHUB_TOKEN is supplied
+RUN if [ -n "$GITHUB_TOKEN" ]; then \
+        echo "GITHUB_TOKEN detected. Cloned private resources will be integrated."; \
+        git clone https://${GITHUB_TOKEN}@github.com/russellshen/The-EngLISP-Project-Assets.git /tmp/assets && \
+        cp /tmp/assets/resources/*.lson /app/englisp/resources/ && \
+        rm -rf /tmp/assets; \
+    else \
+        echo "WARNING: GITHUB_TOKEN build argument is absent. Falling back to public sample dictionary assets."; \
+    fi
+
 # Expose port 8000 for the FastAPI server
 EXPOSE 8000
 
 # Run the application using Gunicorn with Uvicorn workers
 CMD ["gunicorn", "-w", "4", "-k", "uvicorn.workers.UvicornWorker", "--bind", "0.0.0.0:8000", "web.server:app"]
+
