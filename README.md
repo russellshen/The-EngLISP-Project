@@ -1,5 +1,8 @@
 # EngLISP: A Bidirectional Bridge Between Natural Language and Computation
 
+> [!NOTE]
+> 🌐 **Live Public Deployment**: Try out the interactive web visualizer and logic console at [englisp.com](https://englisp.com).
+
 EngLISP is a structured, bidirectional translation system that bridges the gap between the expressive, ambiguous world of human language and the precise, functional world of computation. 
 
 This repository implements the full four-stage pipeline described in the [EngLISP Technical Specification](SPECIFICATION.md), enabling seamless round-trip conversions between human sentences, X-bar syntactic trees, rotated S-expressions, and compressed MinimaLIST configurations.
