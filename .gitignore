@@ -7,6 +7,11 @@ __pycache__/
 # Testing Cache
 .pytest_cache/
 
+# Environment Variables & Secrets
+.env
+.env.local
+.env.*.local
+
 # Virtual Environments
 venv/
 .venv/
@@ -38,3 +43,7 @@ web/users.db
 dist/
 *.egg-info/
 web/logs/
+
+# Conversation & Discussion Exports
+*_Export.md
+

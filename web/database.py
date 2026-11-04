@@ -79,10 +79,11 @@ def db_init():
         
     conn.commit()
     
-    # Bootstrap default admin account if not exists
+    # Bootstrap default admin account if not exists, or sync password if ADMIN_PASSWORD is set
+    admin_password = os.environ.get("ADMIN_PASSWORD")
     cursor.execute("SELECT * FROM users WHERE email = ?", ("admin@englisp.com",))
-    if not cursor.fetchone():
-        admin_password = os.environ.get("ADMIN_PASSWORD")
+    existing_admin = cursor.fetchone()
+    if not existing_admin:
         if not admin_password:
             import sys
             if "pytest" in sys.modules:
@@ -97,6 +98,13 @@ def db_init():
         cursor.execute(
             "INSERT INTO users (email, password_hash, api_key, tier, quota_limit, status, created_at, is_verified) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             ("admin@englisp.com", admin_pass_hash, admin_key, "admin", 999999, "active", created_at, 1)
+        )
+        conn.commit()
+    elif admin_password:
+        admin_pass_hash = hash_password(admin_password)
+        cursor.execute(
+            "UPDATE users SET password_hash = ?, tier = 'admin', quota_limit = 999999, is_verified = 1 WHERE email = ?",
+            (admin_pass_hash, "admin@englisp.com")
         )
         conn.commit()
         
