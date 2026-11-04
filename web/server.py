@@ -360,6 +360,29 @@ class ResetPasswordRequest(BaseModel):
         description="The new password (minimum 6 characters)."
     )
 
+class AdminProvisionRequest(BaseModel):
+    email: str = Field(
+        ...,
+        max_length=100,
+        description="Email for the provisioned user.",
+        examples=["teammate@example.com"]
+    )
+    password: Optional[str] = Field(
+        None,
+        max_length=100,
+        description="Optional password. If omitted, a random password is generated."
+    )
+    tier: str = Field(
+        "paid",
+        description="Tier for the user ('paid', 'free', 'admin'). Defaults to 'paid'.",
+        examples=["paid"]
+    )
+    quota_limit: int = Field(
+        10000,
+        description="Monthly API quota limit. Defaults to 10000.",
+        examples=[10000]
+    )
+
 # --- Authentication & User Endpoints ---
 
 @app.post("/api/auth/register")
@@ -658,6 +681,81 @@ def api_reset_password(req: ResetPasswordRequest, request: Request):
         raise HTTPException(status_code=400, detail="Invalid passcode or passcode has expired.")
         
     return {"success": True, "message": "Password reset successfully. You can now log in."}
+
+# --- Admin User Management Endpoints ---
+
+@app.post("/api/admin/provision-user")
+def api_admin_provision_user(req: AdminProvisionRequest, user: Optional[dict] = Depends(get_auth_user)):
+    if not user or user.get("tier") != "admin":
+        raise HTTPException(status_code=403, detail="Admin privileges required.")
+    
+    email_clean = req.email.strip().lower()
+    if not email_clean or "@" not in email_clean:
+        raise HTTPException(status_code=400, detail="Invalid email address.")
+        
+    existing = database.get_user_by_email(email_clean)
+    conn = database.get_db_connection()
+    cursor = conn.cursor()
+    try:
+        if existing:
+            cursor.execute(
+                "UPDATE users SET tier = ?, quota_limit = ?, status = 'active', is_verified = 1 WHERE id = ?",
+                (req.tier, req.quota_limit, existing["id"])
+            )
+            if req.password:
+                cursor.execute(
+                    "UPDATE users SET password_hash = ? WHERE id = ?",
+                    (database.hash_password(req.password), existing["id"])
+                )
+            conn.commit()
+            target_user = database.get_user_by_email(email_clean)
+        else:
+            pwd = req.password or secrets.token_urlsafe(16)
+            pwd_hash = database.hash_password(pwd)
+            api_key = database.generate_api_key()
+            created_at = datetime.utcnow().isoformat()
+            cursor.execute(
+                "INSERT INTO users (email, password_hash, api_key, tier, quota_limit, status, created_at, is_verified) VALUES (?, ?, ?, ?, ?, ?, ?, 1)",
+                (email_clean, pwd_hash, api_key, req.tier, req.quota_limit, "active", created_at)
+            )
+            conn.commit()
+            target_user = database.get_user_by_email(email_clean)
+    finally:
+        conn.close()
+
+    return {
+        "success": True,
+        "message": f"User {email_clean} provisioned successfully with {req.tier} tier.",
+        "email": target_user["email"],
+        "api_key": target_user["api_key"],
+        "tier": target_user["tier"],
+        "quota_limit": target_user["quota_limit"]
+    }
+
+@app.delete("/api/admin/users/{target_email}")
+def api_admin_delete_user(target_email: str, user: Optional[dict] = Depends(get_auth_user)):
+    if not user or user.get("tier") != "admin":
+        raise HTTPException(status_code=403, detail="Admin privileges required.")
+    
+    clean_target = target_email.strip().lower()
+    if clean_target == user["email"].lower():
+        raise HTTPException(status_code=400, detail="Cannot delete your own admin account.")
+    
+    existing = database.get_user_by_email(clean_target)
+    if not existing:
+        raise HTTPException(status_code=404, detail="User not found.")
+        
+    conn = database.get_db_connection()
+    try:
+        conn.execute("DELETE FROM users WHERE email = ?", (clean_target,))
+        conn.commit()
+    finally:
+        conn.close()
+        
+    return {
+        "success": True,
+        "message": f"User {clean_target} has been deleted and access revoked."
+    }
 
 # --- Core EngLISP Pipeline API Endpoints ---
 

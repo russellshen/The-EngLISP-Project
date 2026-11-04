@@ -109,3 +109,61 @@ def test_change_password_endpoint():
     )
     assert response_short.status_code == 400
     assert "New password must be at least 6 characters" in response_short.json()["detail"]
+
+
+def test_admin_provision_and_delete_user():
+    client = TestClient(app)
+    admin = database.get_user_by_email("admin@englisp.com")
+    api_key = admin["api_key"]
+    
+    # 1. Non-admin cannot provision
+    res_unauth = client.post(
+        "/api/admin/provision-user",
+        json={"email": "team@ml.org", "tier": "paid", "quota_limit": 5000}
+    )
+    assert res_unauth.status_code == 403
+    
+    # 2. Admin provisions user
+    res_prov = client.post(
+        "/api/admin/provision-user",
+        headers={"X-API-Key": api_key},
+        json={"email": "team@ml.org", "tier": "paid", "quota_limit": 5000}
+    )
+    assert res_prov.status_code == 200
+    data = res_prov.json()
+    assert data["success"] is True
+    assert data["email"] == "team@ml.org"
+    assert data["tier"] == "paid"
+    assert data["quota_limit"] == 5000
+    assert data["api_key"].startswith("englisp_live_")
+    
+    # Verify user exists in database and is verified
+    team_user = database.get_user_by_email("team@ml.org")
+    assert team_user is not None
+    assert team_user["is_verified"] == 1
+    assert team_user["tier"] == "paid"
+    
+    # 3. Update existing user's quota/tier
+    res_update = client.post(
+        "/api/admin/provision-user",
+        headers={"X-API-Key": api_key},
+        json={"email": "team@ml.org", "tier": "paid", "quota_limit": 20000}
+    )
+    assert res_update.status_code == 200
+    assert res_update.json()["quota_limit"] == 20000
+    
+    # 4. Delete provisioned user
+    res_del = client.delete(
+        "/api/admin/users/team@ml.org",
+        headers={"X-API-Key": api_key}
+    )
+    assert res_del.status_code == 200
+    assert res_del.json()["success"] is True
+    assert database.get_user_by_email("team@ml.org") is None
+    
+    # 5. Admin cannot delete themselves
+    res_del_self = client.delete(
+        "/api/admin/users/admin@englisp.com",
+        headers={"X-API-Key": api_key}
+    )
+    assert res_del_self.status_code == 400
