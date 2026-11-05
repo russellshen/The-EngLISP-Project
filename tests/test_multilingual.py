@@ -188,3 +188,33 @@ def test_french_determiners_and_possessive_agreement():
     assert minimalist_to_nl(from_string("(dogs)"), lang="fr") == "Les chiens."
     assert minimalist_to_nl(from_string("(strawberries)"), lang="fr") == "Les fraises."
 
+
+def test_french_to_minimalist_no_french_token_leaks():
+    """Verify French to MinimaLIST translates all function words, pronouns, and prepositions to English pivot."""
+    from englisp import nl_to_minimalist, minimalist_to_nl
+    from englisp.loader import CURRENT_USER_TIER
+
+    for tier in ("free", "paid"):
+        CURRENT_USER_TIER.set(tier)
+        
+        # 1. "Ils ont le livre pour le chat."
+        min1 = nl_to_minimalist("Ils ont le livre pour le chat.", lang="fr")
+        assert min1 == ["have", "they", ["book", ["for", "cat"]]]
+        # Confirm no French words leaked into IR
+        assert "ont" not in str(min1)
+        assert "pour" not in str(min1)
+        assert "ils" not in str(min1)
+        
+        # Roundtrip back to French
+        fr1 = minimalist_to_nl(min1, lang="fr")
+        assert fr1 == "Ils ont le livre pour le chat."
+
+        # 2. "Je suis pour la paix."
+        min2 = nl_to_minimalist("Je suis pour la paix.", lang="fr")
+        assert min2 == ["am", "i", ["for", "peace"]]
+        assert "suis" not in str(min2)
+        assert "je" not in str(min2)
+        assert "paix" not in str(min2)
+        
+        fr2 = minimalist_to_nl(min2, lang="fr")
+        assert fr2 == "Je suis pour la paix."

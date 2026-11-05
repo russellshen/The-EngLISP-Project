@@ -95,8 +95,86 @@ def inflect_verb(base: str, form_type: str, lang: str) -> str:
             return stem + "er"
     return base
 
+FRENCH_FUNCTION_WORDS_TO_ENGLISH = {
+    # Subject and object pronouns
+    "je": "i", "j'": "i", "moi": "me",
+    "tu": "you", "toi": "you",
+    "il": "he", "lui": "him",
+    "elle": "she",
+    "on": "one",
+    "nous": "we",
+    "vous": "you",
+    "ils": "they", "eux": "them",
+    "elles": "they",
+    # Possessive determiners
+    "mon": "my", "ma": "my", "mes": "my",
+    "ton": "your", "ta": "your", "tes": "your",
+    "son": "his", "sa": "her", "ses": "their",
+    "notre": "our", "nos": "our",
+    "votre": "your", "vos": "your",
+    "leur": "their", "leurs": "their",
+    # Prepositions
+    "pour": "for",
+    "avec": "with",
+    "dans": "in",
+    "sur": "over",
+    "sous": "under",
+    "sans": "without",
+    "chez": "at",
+    "par": "by",
+    "vers": "toward",
+    "contre": "against",
+    "entre": "between",
+    "pendant": "during",
+    "devant": "before",
+    "derrière": "behind",
+    "depuis": "since",
+    "de": "of", "d'": "of",
+    "à": "to", "au": "to", "aux": "to",
+    # Auxiliaries / Copula forms / Verbs
+    "ont": "have",
+    "a": "has",
+    "ai": "have",
+    "as": "have",
+    "avons": "have",
+    "avez": "have",
+    "avait": "had",
+    "avaient": "had",
+    "aura": "will have",
+    "auront": "will have",
+    "eu": "had",
+    "avoir": "have",
+    "suis": "am",
+    "es": "are",
+    "est": "is",
+    "sommes": "are",
+    "êtes": "are",
+    "sont": "are",
+    "était": "was",
+    "étaient": "were",
+    "sera": "will be",
+    "seront": "will be",
+    "été": "been",
+    "être": "be",
+    # Common verbs
+    "dort": "sleeps",
+    "dorment": "sleep",
+    "dormir": "sleep",
+    "va": "goes",
+    "vont": "go",
+    "aller": "go",
+    "fait": "makes",
+    "font": "make",
+    "faire": "make",
+}
+
 def get_base_verb(verb_word: str, lang: str) -> str:
     verb_word = verb_word.lower()
+    if lang == "fr":
+        if verb_word in ("ai", "as", "a", "avons", "avez", "ont", "avait", "avaient", "aura", "auront", "eu", "eut", "eurent", "avoir"):
+            return "avoir"
+        if verb_word in ("suis", "es", "est", "sommes", "êtes", "sont", "était", "étaient", "sera", "seront", "été", "être", "fus", "fut", "furent"):
+            return "être"
     # Look up in database verb forms first
     forms_dict = FRENCH_VERB_FORMS if lang == "fr" else ENGLISH_VERB_FORMS
     for base, forms in forms_dict.items():
@@ -126,7 +204,21 @@ def get_pivot_base_verb(verb_word: str, lang: str) -> str:
     if verb_word.startswith("v") and len(verb_word) > 1 and verb_word[1].isdigit():
         return verb_word
     if lang == "fr":
+        if verb_word in ("ont", "a", "ai", "as", "avons", "avez", "avait", "avaient", "aura", "auront", "eu", "avoir"):
+            return "have"
+        if verb_word in ("suis", "es", "est", "sommes", "êtes", "sont", "était", "étaient", "sera", "seront", "été", "être"):
+            return "be"
+        if verb_word in FRENCH_FUNCTION_WORDS_TO_ENGLISH:
+            en_trans = FRENCH_FUNCTION_WORDS_TO_ENGLISH[verb_word]
+            return get_base_verb(en_trans, "en")
         fr_base = get_base_verb(verb_word, "fr")
+        if fr_base in ("avoir", "a", "ont"):
+            return "have"
+        if fr_base in ("être", "est", "suis", "sont"):
+            return "be"
+        if fr_base in FRENCH_FUNCTION_WORDS_TO_ENGLISH:
+            en_trans = FRENCH_FUNCTION_WORDS_TO_ENGLISH[fr_base]
+            return get_base_verb(en_trans, "en")
         en_present = FRENCH_TO_ENGLISH_VOCAB.get(fr_base, fr_base)
         return get_base_verb(en_present, "en")
     else:
@@ -373,12 +465,16 @@ def xbar_to_sexpr(node: XBarNode, lang: str = "en") -> SExpr:
             return ""
         if lang == "fr":
             lbl_lower = lbl.lower()
+            if lbl_lower in FRENCH_FUNCTION_WORDS_TO_ENGLISH:
+                return FRENCH_FUNCTION_WORDS_TO_ENGLISH[lbl_lower]
             translated = None
             from englisp.loader import FRENCH_LEXICON
             is_verb = (FRENCH_LEXICON.get(lbl_lower) == "V") or (lbl_lower.endswith("s") and FRENCH_LEXICON.get(lbl_lower[:-1]) == "V")
             if not is_verb and lbl_lower.endswith(("s", "x")) and lbl_lower not in ("les", "des", "ses", "mes", "tes", "nos", "vos", "leurs"):
                 singular = lbl_lower[:-1]
-                if singular in FRENCH_TO_ENGLISH_VOCAB:
+                if singular in FRENCH_FUNCTION_WORDS_TO_ENGLISH:
+                    translated = FRENCH_FUNCTION_WORDS_TO_ENGLISH[singular] + "s"
+                elif singular in FRENCH_TO_ENGLISH_VOCAB:
                     translated = FRENCH_TO_ENGLISH_VOCAB[singular] + "s"
             if not translated:
                 translated = FRENCH_TO_ENGLISH_VOCAB.get(lbl_lower, lbl)

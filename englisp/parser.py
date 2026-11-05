@@ -105,6 +105,21 @@ COMMON_PREPOSITIONS = {
     "upon", "with", "within", "without"
 }
 
+COMMON_FRENCH_PREPOSITIONS = {
+    "pour", "avec", "dans", "sur", "sous", "sans", "chez", "par", "vers", "contre",
+    "entre", "pendant", "devant", "derrière", "depuis", "à", "de", "d'"
+}
+
+FRENCH_COPULAS = {
+    "suis", "es", "est", "sommes", "êtes", "sont", "était", "étaient", "sera", "seront",
+    "fus", "fut", "furent", "sois", "soit", "soyons", "soyez", "soient"
+}
+
+FRENCH_HAVE_VERBS = {
+    "ai", "as", "a", "avons", "avez", "ont", "avait", "avaient", "aura", "auront",
+    "eut", "eurent", "aie", "ait", "ayons", "ayez", "aient"
+}
+
 
 def clean_and_tokenize(text: str) -> List[str]:
     """Cleans punctuation and splits string into tokens, separating French clitics and expanding contractions."""
@@ -147,6 +162,11 @@ def correct_word(word: str, lang: str = "en") -> str:
         return word
     if w_lower in COMMON_PREPOSITIONS:
         return word
+    if lang == "fr":
+        if w_lower in COMMON_FRENCH_PREPOSITIONS:
+            return word
+        if w_lower in FRENCH_COPULAS or w_lower in FRENCH_HAVE_VERBS:
+            return word
     lex = FRENCH_LEXICON if lang == "fr" else LEXICON
     full_lex = FRENCH_LEXICON_FULL if lang == "fr" else LEXICON_FULL
     # Ignore placeholders, special symbols, numbers
@@ -230,11 +250,17 @@ def tag_tokens(tokens: List[str], lang: str = "en") -> List[Tuple[str, str]]:
                 tagged.append((token, "N"))
                 continue
         # Contextual lookahead for French auxiliaries
-        if lang == "fr" and token in ("a", "est", "avait", "aura", "était", "sera", "ont", "avais", "auront", "seront") and idx + 1 < len(tokens):
-            next_token = tokens[idx + 1]
+        if lang == "fr" and t_lower in ("a", "est", "avait", "aura", "était", "sera", "ont", "avais", "auront", "seront", "ai", "as", "avons", "avez", "suis", "es", "sommes", "êtes", "sont", "étaient", "avaient") and idx + 1 < len(tokens):
+            next_token = tokens[idx + 1].lower()
             if (next_token in lex and lex[next_token] == "V") or next_token.endswith("é") or next_token.endswith("er") or next_token in ("été", "être", "en") or re.match(r"^v\d+", next_token):
                 tagged.append((token, "I"))
                 continue
+            elif t_lower in FRENCH_COPULAS or t_lower in FRENCH_HAVE_VERBS:
+                tagged.append((token, "V"))
+                continue
+        elif lang == "fr" and (t_lower in FRENCH_COPULAS or t_lower in FRENCH_HAVE_VERBS):
+            tagged.append((token, "V"))
+            continue
 
         # Check for French progressive "en train de/d'" helper sequence
         if lang == "fr":
@@ -246,6 +272,9 @@ def tag_tokens(tokens: List[str], lang: str = "en") -> List[Tuple[str, str]]:
                 continue
             if token in ("de", "d'") and idx > 1 and tokens[idx-2] == "en" and tokens[idx-1] == "train":
                 tagged.append((token, "I"))
+                continue
+            if t_lower in COMMON_FRENCH_PREPOSITIONS:
+                tagged.append((token, "P"))
                 continue
 
         # Contextual lookahead for English auxiliaries
@@ -732,7 +761,7 @@ def parse(text: str, lang: Optional[str] = None) -> XBarNode:
                 spelling_corrections.append({"original": t, "corrected": corr})
             
             w_lower = corr.lower()
-            is_known = (w_lower in lex) or (w_lower in PRONOUN_LEXICON) or (w_lower == "_") or (w_lower.startswith("[") and w_lower.endswith("]")) or w_lower.isdigit()
+            is_known = (w_lower in lex) or (w_lower in PRONOUN_LEXICON) or (w_lower in COMMON_PREPOSITIONS) or (lang == "fr" and (w_lower in COMMON_FRENCH_PREPOSITIONS or w_lower in FRENCH_COPULAS or w_lower in FRENCH_HAVE_VERBS)) or (w_lower == "_") or (w_lower.startswith("[") and w_lower.endswith("]")) or w_lower.isdigit()
             if not is_known:
                 for suffix in plural_suffixes:
                     if w_lower.endswith(suffix):
