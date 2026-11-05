@@ -21,7 +21,7 @@ import re
 from typing import List, Optional, Tuple, Any
 from englisp.xbar import XBarNode
 from englisp.loader import (
-    LEXICON, FRENCH_LEXICON, GRAMMAR, FRENCH_GRAMMAR, ENGLISH_CONTRACTIONS,
+    LEXICON, FRENCH_LEXICON, LEXICON_FULL, FRENCH_LEXICON_FULL, GRAMMAR, FRENCH_GRAMMAR, ENGLISH_CONTRACTIONS,
     ORIGINAL_EN_WORDS, ORIGINAL_FR_WORDS, FRENCH_GENDER, MORPHOLOGY_RULES
 )
 
@@ -31,28 +31,78 @@ class EngLISPParseError(ValueError):
         self.diagnostics = diagnostics
 
 PRONOUN_LEXICON = {
-    # English Subject Pronouns
+    # English 1st Person Pronouns
+    "i": {"gender": "neutral", "number": "singular", "type": "subject"},
+    "me": {"gender": "neutral", "number": "singular", "type": "object"},
+    "my": {"gender": "neutral", "number": "singular", "type": "possessive"},
+    "mine": {"gender": "neutral", "number": "singular", "type": "possessive"},
+    "myself": {"gender": "neutral", "number": "singular", "type": "reflexive"},
+    "we": {"gender": "neutral", "number": "plural", "type": "subject"},
+    "us": {"gender": "neutral", "number": "plural", "type": "object"},
+    "our": {"gender": "neutral", "number": "plural", "type": "possessive"},
+    "ours": {"gender": "neutral", "number": "plural", "type": "possessive"},
+    "ourselves": {"gender": "neutral", "number": "plural", "type": "reflexive"},
+    # English 2nd Person Pronouns
+    "you": {"gender": "neutral", "number": "singular", "type": "subject_or_object"},
+    "your": {"gender": "neutral", "number": "singular", "type": "possessive"},
+    "yours": {"gender": "neutral", "number": "singular", "type": "possessive"},
+    "yourself": {"gender": "neutral", "number": "singular", "type": "reflexive"},
+    "yourselves": {"gender": "neutral", "number": "plural", "type": "reflexive"},
+    # English 3rd Person Pronouns
     "he": {"gender": "masculine", "number": "singular", "type": "subject"},
     "she": {"gender": "feminine", "number": "singular", "type": "subject"},
     "it": {"gender": "neuter", "number": "singular", "type": "subject_or_object"},
     "they": {"gender": "neutral", "number": "plural", "type": "subject"},
-    # English Object Pronouns
     "him": {"gender": "masculine", "number": "singular", "type": "object"},
     "her": {"gender": "feminine", "number": "singular", "type": "object"},
     "them": {"gender": "neutral", "number": "plural", "type": "object"},
-    # English Possessive Pronouns
     "his": {"gender": "masculine", "number": "singular", "type": "possessive"},
     "its": {"gender": "neuter", "number": "singular", "type": "possessive"},
     "their": {"gender": "neutral", "number": "plural", "type": "possessive"},
+    "himself": {"gender": "masculine", "number": "singular", "type": "reflexive"},
+    "herself": {"gender": "feminine", "number": "singular", "type": "reflexive"},
+    "itself": {"gender": "neuter", "number": "singular", "type": "reflexive"},
+    "themselves": {"gender": "neutral", "number": "plural", "type": "reflexive"},
     
     # French Subject Pronouns
+    "je": {"gender": "neutral", "number": "singular", "type": "subject"},
+    "j'": {"gender": "neutral", "number": "singular", "type": "subject"},
+    "tu": {"gender": "neutral", "number": "singular", "type": "subject"},
     "il": {"gender": "masculine", "number": "singular", "type": "subject"},
     "elle": {"gender": "feminine", "number": "singular", "type": "subject"},
+    "on": {"gender": "neutral", "number": "singular", "type": "subject"},
+    "nous": {"gender": "neutral", "number": "plural", "type": "subject_or_object"},
+    "vous": {"gender": "neutral", "number": "plural", "type": "subject_or_object"},
     "ils": {"gender": "masculine", "number": "plural", "type": "subject"},
     "elles": {"gender": "feminine", "number": "plural", "type": "subject"},
     # French Object/Possessive Pronouns
+    "moi": {"gender": "neutral", "number": "singular", "type": "object"},
+    "toi": {"gender": "neutral", "number": "singular", "type": "object"},
     "lui": {"gender": "neutral", "number": "singular", "type": "object"},
     "leur": {"gender": "neutral", "number": "plural", "type": "object"},
+    "mon": {"gender": "masculine", "number": "singular", "type": "possessive"},
+    "ma": {"gender": "feminine", "number": "singular", "type": "possessive"},
+    "mes": {"gender": "neutral", "number": "plural", "type": "possessive"},
+    "ton": {"gender": "masculine", "number": "singular", "type": "possessive"},
+    "ta": {"gender": "feminine", "number": "singular", "type": "possessive"},
+    "tes": {"gender": "neutral", "number": "plural", "type": "possessive"},
+    "son": {"gender": "masculine", "number": "singular", "type": "possessive"},
+    "sa": {"gender": "feminine", "number": "singular", "type": "possessive"},
+    "ses": {"gender": "neutral", "number": "plural", "type": "possessive"},
+    "notre": {"gender": "neutral", "number": "singular", "type": "possessive"},
+    "nos": {"gender": "neutral", "number": "plural", "type": "possessive"},
+    "votre": {"gender": "neutral", "number": "singular", "type": "possessive"},
+    "vos": {"gender": "neutral", "number": "plural", "type": "possessive"},
+    "leurs": {"gender": "neutral", "number": "plural", "type": "possessive"},
+}
+
+COMMON_PREPOSITIONS = {
+    "about", "above", "across", "after", "against", "along", "among", "around", "at",
+    "before", "behind", "below", "beneath", "beside", "between", "beyond", "by",
+    "down", "during", "except", "for", "from", "in", "inside", "into", "like", "near",
+    "of", "off", "on", "onto", "out", "outside", "over", "past", "since", "through",
+    "throughout", "to", "toward", "towards", "under", "underneath", "until", "up",
+    "upon", "with", "within", "without"
 }
 
 
@@ -95,17 +145,25 @@ def correct_word(word: str, lang: str = "en") -> str:
     w_lower = word.lower()
     if w_lower in PRONOUN_LEXICON:
         return word
+    if w_lower in COMMON_PREPOSITIONS:
+        return word
     lex = FRENCH_LEXICON if lang == "fr" else LEXICON
+    full_lex = FRENCH_LEXICON_FULL if lang == "fr" else LEXICON_FULL
     # Ignore placeholders, special symbols, numbers
-    if word in lex or word == "_" or (word.startswith("[") and word.endswith("]")) or word.isdigit():
+    if word in lex or word in full_lex or word == "_" or (word.startswith("[") and word.endswith("]")) or word.isdigit():
         return word
         
-    # Plural check bypass
+    # Plural check bypass (-ies and general suffixes)
+    if w_lower.endswith("ies") and len(w_lower) > 3:
+        stem_y = w_lower[:-3] + "y"
+        if stem_y in lex or stem_y in full_lex:
+            return word
+
     plural_suffixes = MORPHOLOGY_RULES.get(lang, {}).get("plural_suffixes", ())
     for suffix in plural_suffixes:
         if w_lower.endswith(suffix):
             base = w_lower[:-len(suffix)]
-            if base in lex:
+            if base in lex or base in full_lex:
                 return word
     
     # We only correct alphabetic words of length >= 2
@@ -121,7 +179,8 @@ def correct_word(word: str, lang: str = "en") -> str:
         if len(word) >= 2:
             lex._load_partition_for_word(word[1])
             
-    candidates = dict.keys(lex) if hasattr(lex, "_load_partition_for_word") else lex.keys()
+    active_lex = lex._get_active() if hasattr(lex, "_get_active") else lex
+    candidates = dict.keys(active_lex) if hasattr(active_lex, "_load_partition_for_word") else active_lex.keys()
     orig_set = ORIGINAL_FR_WORDS if lang == "fr" else ORIGINAL_EN_WORDS
     
     for vocab_word in candidates:
@@ -146,6 +205,7 @@ def correct_word(word: str, lang: str = "en") -> str:
 def tag_tokens(tokens: List[str], lang: str = "en") -> List[Tuple[str, str]]:
     """Tags tokens with POS tags using lexicon, context, and language-specific heuristics."""
     lex = FRENCH_LEXICON if lang == "fr" else LEXICON
+    full_lex = FRENCH_LEXICON_FULL if lang == "fr" else LEXICON_FULL
     plural_suffixes = MORPHOLOGY_RULES.get(lang, {}).get("plural_suffixes", ())
     tagged = []
     for idx, token in enumerate(tokens):
@@ -154,8 +214,21 @@ def tag_tokens(tokens: List[str], lang: str = "en") -> List[Tuple[str, str]]:
             tagged.append((token, "V"))
             continue
         if t_lower in PRONOUN_LEXICON:
-            tagged.append((token, "N"))
-            continue
+            p_type = PRONOUN_LEXICON[t_lower].get("type")
+            if p_type == "possessive":
+                tagged.append((token, "Det"))
+                continue
+            elif t_lower == "her":
+                if idx + 1 < len(tokens):
+                    next_tok = tokens[idx + 1].lower()
+                    if next_tok not in COMMON_PREPOSITIONS and next_tok not in ("is", "am", "are", "was", "were", "and", "or"):
+                        tagged.append((token, "Det"))
+                        continue
+                tagged.append((token, "N"))
+                continue
+            else:
+                tagged.append((token, "N"))
+                continue
         # Contextual lookahead for French auxiliaries
         if lang == "fr" and token in ("a", "est", "avait", "aura", "était", "sera", "ont", "avais", "auront", "seront") and idx + 1 < len(tokens):
             next_token = tokens[idx + 1]
@@ -176,21 +249,52 @@ def tag_tokens(tokens: List[str], lang: str = "en") -> List[Tuple[str, str]]:
                 continue
 
         # Contextual lookahead for English auxiliaries
-        if lang == "en" and token in ("is", "am", "are", "was", "were", "has", "have", "had") and idx + 1 < len(tokens):
-            next_token = tokens[idx + 1]
-            if (next_token in lex and lex[next_token] == "V") or next_token.endswith("ing") or next_token.endswith("ed") or next_token in ("been", "be") or re.match(r"^v\d+", next_token):
+        if lang == "en" and t_lower in ("is", "am", "are", "was", "were", "has", "have", "had") and idx + 1 < len(tokens):
+            next_token = tokens[idx + 1].lower()
+            if (next_token in full_lex and full_lex[next_token] == "V") or next_token.endswith("ing") or next_token.endswith("ed") or next_token in ("been", "be") or re.match(r"^v\d+", next_token):
                 tagged.append((token, "I"))
                 continue
+            elif t_lower in ("is", "am", "are", "was", "were"):
+                tagged.append((token, "V"))
+                continue
+        elif lang == "en" and t_lower in ("is", "am", "are", "was", "were"):
+            tagged.append((token, "V"))
+            continue
+
+        # Check for English prepositions & contextual parts of speech
+        if lang == "en":
+            if t_lower in ("for", "into", "onto", "upon", "toward", "towards", "throughout", "within", "without"):
+                tagged.append((token, "P"))
+                continue
+            if t_lower == "like":
+                if idx > 0 and tagged[idx - 1][1] in ("V", "N") and idx + 1 < len(tokens):
+                    tagged.append((token, "P"))
+                    continue
+            if t_lower in ("taste", "tastes", "smell", "smells", "sound", "sounds", "look", "looks", "feel", "feels"):
+                if idx > 0 and tagged[idx - 1][1] in ("N", "Det"):
+                    tagged.append((token, "V"))
+                    continue
+            if t_lower == "blame":
+                if idx > 0 and tokens[idx - 1].lower() == "to":
+                    tagged.append((token, "N"))
+                    continue
 
         # Check for Synset ID pattern matches
         if re.match(r"^n\d+", token):
             tagged.append((token, "N"))
         elif re.match(r"^v\d+", token):
             tagged.append((token, "V"))
+        elif t_lower.endswith("ies") and len(t_lower) > 3:
+            stem_y = t_lower[:-3] + "y"
+            if (stem_y in lex and lex[stem_y] == "N") or (stem_y in full_lex and full_lex[stem_y] == "N") or stem_y in ("strawberry", "berry", "cherry"):
+                tagged.append((token, "N"))
         elif token in lex:
             tagged.append((token, lex[token]))
+        elif token in full_lex and full_lex[token] in ("N", "V", "Adj", "Adv", "Det", "P", "Conj", "C"):
+            tagged.append((token, full_lex[token]))
         elif t_lower.endswith(plural_suffixes) and any(
-            t_lower[:-len(sfx)] in lex and lex[t_lower[:-len(sfx)]] == "N"
+            (t_lower[:-len(sfx)] in lex and lex[t_lower[:-len(sfx)]] == "N") or
+            (t_lower[:-len(sfx)] in full_lex and full_lex[t_lower[:-len(sfx)]] == "N")
             for sfx in plural_suffixes if t_lower.endswith(sfx)
         ):
             tagged.append((token, "N"))

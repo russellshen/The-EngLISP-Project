@@ -326,6 +326,10 @@ class TierDelegatingDict(dict):
     def _get_active(self):
         tier = CURRENT_USER_TIER.get()
         return self.full_dict if tier == "paid" else self.sample_dict
+    def _load_partition_for_word(self, word: str):
+        active = self._get_active()
+        if hasattr(active, "_load_partition_for_word"):
+            active._load_partition_for_word(word)
     def __contains__(self, key) -> bool:
         return key in self._get_active()
     def __getitem__(self, key) -> Any:

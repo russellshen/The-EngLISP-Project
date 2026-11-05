@@ -111,3 +111,23 @@ def test_earley_parser_ambiguity():
     assert nbar.children[1].category == "PP"
     assert nbar.children[1].role == "complement"
 
+def test_complex_sentences_blame_and_strawberries():
+    from englisp import canonicalizer
+    # 1. "I am to blame for her death."
+    text1 = "I am to blame for her death."
+    tree1 = parser.parse(text1)
+    assert tree1.category == "IP"
+    sexpr1 = canonicalizer.xbar_to_sexpr(tree1)
+    assert canonicalizer.sexpr_to_string(sexpr1) == "(am (i) (to (blame (for (death her)))))"
+    gen1 = parser.generate(tree1)
+    assert gen1 == "I am to blame for her death."
+
+    # 2. "strawberries taste like fruit"
+    text2 = "strawberries taste like fruit"
+    tree2 = parser.parse(text2)
+    assert tree2.category == "IP"
+    sexpr2 = canonicalizer.xbar_to_sexpr(tree2)
+    assert canonicalizer.sexpr_to_string(sexpr2) == "(taste (strawberries) (like (fruit)))"
+    gen2 = parser.generate(tree2)
+    assert gen2 == "Strawberries taste like fruit."
+

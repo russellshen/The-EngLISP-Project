@@ -715,7 +715,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (response.ok && data.success) {
                 updateUIForward(data.pipeline);
             } else {
-                showError(data.detail || 'An error occurred during parsing.');
+                showError(data.message || data.detail || 'An error occurred during parsing.');
             }
         } catch (err) {
             showError('Could not connect to the backend server. Make sure it is running.');
