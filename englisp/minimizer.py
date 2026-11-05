@@ -46,6 +46,16 @@ ADJECTIVE_CONTRACTIONS = {
 
 ADJECTIVE_EXPANSIONS = {v: k for k, v in ADJECTIVE_CONTRACTIONS.items()}
 
+PRONOUNS_NO_DET = {
+    "i", "you", "he", "she", "it", "we", "they", "me", "him", "her", "us", "them",
+    "je", "tu", "il", "elle", "on", "nous", "vous", "ils", "elles", "moi", "toi", "lui"
+}
+
+POSSESSIVE_DETS = {
+    "my", "your", "his", "her", "its", "our", "their",
+    "mon", "ma", "mes", "ton", "ta", "tes", "son", "sa", "ses", "notre", "nos", "votre", "vos", "leur", "leurs"
+}
+
 
 def get_pos(word: str) -> str:
     """Helper to check the part of speech of a word."""
@@ -326,6 +336,11 @@ def expand_sexpr(expr: SExpr, is_head: bool = False) -> SExpr:
     # 1. Base case: single string terminal (often a pruned bare noun)
     if isinstance(expr, str):
         if not is_head:
+            expr_lower = expr.lower()
+            if expr_lower in POSSESSIVE_DETS:
+                return expr
+            if expr_lower in PRONOUNS_NO_DET:
+                return [expr]
             pos = get_pos(expr)
             if pos == "N":
                 if expr in SEMANTIC_EXPANSIONS:
@@ -350,6 +365,10 @@ def expand_sexpr(expr: SExpr, is_head: bool = False) -> SExpr:
     # We should restore the determiner 'the'
     if op_pos == "N":
         noun = op
+        noun_lower = noun.lower()
+        if noun_lower in PRONOUNS_NO_DET or noun_lower == "blame":
+            return exp_children
+
         det = "the" # Default determiner
         adjs = []
         pps = []
@@ -357,7 +376,7 @@ def expand_sexpr(expr: SExpr, is_head: bool = False) -> SExpr:
         has_det = False
         for arg in exp_children[1:]:
             if isinstance(arg, str):
-                if get_pos(arg) == "Det":
+                if get_pos(arg) == "Det" or arg.lower() in POSSESSIVE_DETS:
                     det = arg
                     has_det = True
                 else:

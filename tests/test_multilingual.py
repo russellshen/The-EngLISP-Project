@@ -154,3 +154,37 @@ def test_new_verbs_multilingual():
     tree_fr3 = parser.parse(fr_text3, lang="fr")
     sexpr3 = canonicalizer.xbar_to_sexpr(tree_fr3, lang="fr")
     assert canonicalizer.sexpr_to_string(sexpr3) == "(stops (dog the) (cat the))"
+
+def test_minimalist_to_french_generation():
+    from englisp import minimalist_to_nl, from_string
+
+    # 1. Pronoun subject, singular noun with determiner
+    min1 = from_string("(has she book)")
+    assert minimalist_to_nl(min1, lang="fr") == "Elle a le livre."
+
+    # 2. Plural subject, verb agreement, prepositional modifier, plural noun
+    min2 = from_string("(taste strawberries (like fruit))")
+    assert minimalist_to_nl(min2, lang="fr") == "Les fraises goûtent comme le fruit."
+
+    # 3. 1st person singular copula ("am"), infinitive complement, preposition, possessive pronoun agreement
+    min3 = from_string("(am i (to (blame (for (death her)))))")
+    assert minimalist_to_nl(min3, lang="fr") == "Je suis à blâmer pour sa mort."
+
+    # 4. Plural subject with passé composé auxiliary agreement ("ont")
+    min4 = from_string("(chased dogs cat)")
+    assert minimalist_to_nl(min4, lang="fr") == "Les chiens ont chassé le chat."
+
+def test_french_determiners_and_possessive_agreement():
+    from englisp import minimalist_to_nl, from_string
+
+    # Feminine singular possessive
+    assert minimalist_to_nl(from_string("(death her)"), lang="fr") == "Sa mort."
+    assert minimalist_to_nl(from_string("(death my)"), lang="fr") == "Ma mort."
+
+    # Masculine singular possessive
+    assert minimalist_to_nl(from_string("(book his)"), lang="fr") == "Son livre."
+
+    # Plural definite article
+    assert minimalist_to_nl(from_string("(dogs)"), lang="fr") == "Les chiens."
+    assert minimalist_to_nl(from_string("(strawberries)"), lang="fr") == "Les fraises."
+

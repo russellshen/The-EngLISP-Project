@@ -33,6 +33,17 @@ def inflect_verb(base: str, form_type: str, lang: str) -> str:
     base = base.lower()
     # 1. Database forms lookup
     forms_dict = FRENCH_VERB_FORMS if lang == "fr" else ENGLISH_VERB_FORMS
+    if lang == "fr":
+        # Irregular copula / auxiliary handling
+        if base in ("être", "est", "suis", "es"):
+            cop_map = {"1sg": "suis", "2sg": "es", "3sg": "est", "1pl": "sommes", "2pl": "êtes", "3pl": "sont", "imp": "était", "fut": "sera", "pp": "été", "inf": "être"}
+            if form_type in cop_map:
+                return cop_map[form_type]
+        elif base in ("avoir", "a", "ai", "as"):
+            aux_map = {"1sg": "ai", "2sg": "as", "3sg": "a", "1pl": "avons", "2pl": "avez", "3pl": "ont", "imp": "avait", "fut": "aura", "pp": "eu", "inf": "avoir"}
+            if form_type in aux_map:
+                return aux_map[form_type]
+
     if base in forms_dict:
         forms = forms_dict[base]
         idx_map = {
@@ -41,6 +52,12 @@ def inflect_verb(base: str, form_type: str, lang: str) -> str:
         }[lang]
         if form_type in idx_map:
             return forms[idx_map[form_type]]
+        elif lang == "fr" and form_type == "3pl":
+            # For regular 1st group (-er) verbs, 3pl ends in -ent
+            if forms[0].endswith("e"):
+                return forms[0] + "nt"
+        elif lang == "fr" and form_type == "1sg":
+            return forms[0]
     
     # 2. General morphological rules (parameterized by lang)
     if lang == "en":
@@ -63,6 +80,10 @@ def inflect_verb(base: str, form_type: str, lang: str) -> str:
     elif lang == "fr":
         stem = base[:-1] if base.endswith("e") else base
         if form_type == "3sg":
+            return stem + "e"
+        elif form_type == "3pl":
+            return stem + "ent"
+        elif form_type == "1sg":
             return stem + "e"
         elif form_type == "imp":
             return stem + "ait"
@@ -154,24 +175,128 @@ def get_tense_vector(aux_words: List[str], verb_word: str, lang: str) -> Tuple[i
         aspect = "continuous" if is_continuous else "simple"
         return t1, t2, aspect
 
-def translate_word_from_pivot(word: str, target_lang: str, gender: Optional[str] = None) -> str:
+def is_plural_nominal(expr: Any) -> bool:
+    """Checks whether an expression represents a plural nominal constituent."""
+    if isinstance(expr, list) and len(expr) > 0:
+        head = expr[0]
+    elif isinstance(expr, str):
+        head = expr
+    else:
+        return False
+    if not isinstance(head, str):
+        return False
+    head_lower = head.lower()
+    if head_lower in ("they", "we", "ils", "elles", "nous", "strawberries", "dogs", "cats"):
+        return True
+    if head_lower.endswith("s") and head_lower not in ("this", "its", "his", "us", "yes", "i"):
+        return True
+    return False
+
+def is_1sg_nominal(expr: Any) -> bool:
+    """Checks whether an expression represents a 1st person singular nominal constituent."""
+    if isinstance(expr, list) and len(expr) > 0:
+        head = expr[0]
+    elif isinstance(expr, str):
+        head = expr
+    else:
+        return False
+    if not isinstance(head, str):
+        return False
+    return head.lower() in ("i", "je", "j'", "me", "moi")
+
+def translate_word_from_pivot(word: str, target_lang: str, gender: Optional[str] = None, number: str = "singular") -> str:
     """Translates an English pivot word to the target language (e.g. French)."""
     if target_lang != "fr":
         return word
     word_lower = word.lower()
     
-    # Handle Determiners based on gender
-    if word_lower in ("the", "a", "an"):
-        if gender == "F":
-            return "la" if word_lower == "the" else "une"
-        else:
-            return "le" if word_lower == "the" else "un"
-            
+    # Handle Determiners based on gender and number
+    if word_lower in ("the", "a", "an", "this", "that", "these", "those", "my", "your", "his", "her", "its", "our", "their"):
+        if number == "plural" or word_lower in ("these", "those"):
+            if word_lower == "the":
+                return "les"
+            elif word_lower in ("a", "an"):
+                return "des"
+            elif word_lower in ("this", "that", "these", "those"):
+                return "ces"
+            elif word_lower == "my":
+                return "mes"
+            elif word_lower == "your":
+                return "tes"
+            elif word_lower in ("his", "her", "its"):
+                return "ses"
+            elif word_lower == "our":
+                return "nos"
+            elif word_lower == "their":
+                return "leurs"
+        else: # singular
+            if word_lower == "the":
+                return "la" if gender == "F" else "le"
+            elif word_lower in ("a", "an"):
+                return "une" if gender == "F" else "un"
+            elif word_lower in ("this", "that"):
+                return "cette" if gender == "F" else "ce"
+            elif word_lower == "my":
+                return "ma" if gender == "F" else "mon"
+            elif word_lower == "your":
+                return "ta" if gender == "F" else "ton"
+            elif word_lower in ("his", "her", "its"):
+                return "sa" if gender == "F" else "son"
+            elif word_lower == "our":
+                return "notre"
+            elif word_lower == "their":
+                return "leur"
+
+    # Pronouns
+    PRONOUNS_EN_TO_FR = {
+        "i": "je",
+        "you": "vous",
+        "he": "il",
+        "she": "elle",
+        "it": "il",
+        "we": "nous",
+        "they": "ils",
+        "me": "moi",
+        "him": "lui",
+        "them": "eux",
+        "us": "nous",
+    }
+    if word_lower in PRONOUNS_EN_TO_FR:
+        return PRONOUNS_EN_TO_FR[word_lower]
+
+    # Prepositions
+    PREPS_EN_TO_FR = {
+        "for": "pour",
+        "to": "à",
+        "like": "comme",
+        "with": "avec",
+        "in": "dans",
+        "on": "sur",
+        "under": "sous",
+        "over": "sur",
+        "by": "par",
+        "about": "environ",
+        "from": "de",
+        "of": "de",
+        "at": "à",
+        "between": "entre",
+    }
+    if word_lower in PREPS_EN_TO_FR:
+        return PREPS_EN_TO_FR[word_lower]
+
     # Check translation vocabulary
     translated = None
     from englisp.loader import LEXICON
     is_verb = (LEXICON.get(word_lower) == "V") or (word_lower.endswith("s") and LEXICON.get(word_lower[:-1]) == "V")
-    if not is_verb and word_lower.endswith("s") and word_lower not in ("this", "its", "his", "their", "them", "us", "yes"):
+    if not is_verb and word_lower.endswith("ies") and len(word_lower) > 3:
+        stem_y = word_lower[:-3] + "y"
+        if stem_y in ENGLISH_TO_FRENCH_VOCAB:
+            translated = ENGLISH_TO_FRENCH_VOCAB[stem_y] + "s"
+    elif not is_verb and word_lower.endswith("es") and len(word_lower) > 3:
+        stem_e = word_lower[:-2]
+        if stem_e in ENGLISH_TO_FRENCH_VOCAB:
+            translated = ENGLISH_TO_FRENCH_VOCAB[stem_e] + "s"
+    elif not is_verb and word_lower.endswith("s") and word_lower not in ("this", "its", "his", "their", "them", "us", "yes"):
         singular = word_lower[:-1]
         if singular in ENGLISH_TO_FRENCH_VOCAB:
             translated = ENGLISH_TO_FRENCH_VOCAB[singular] + "s"
@@ -953,6 +1078,9 @@ def sexpr_to_xbar(expr: SExpr, lang: str = "en") -> XBarNode:
         subject_expr = expr[1]
         args = expr[2:]
         
+        is_plural_subj = is_plural_nominal(subject_expr)
+        is_1sg_subj = is_1sg_nominal(subject_expr)
+
         # Check for tense vector at the end of args
         tense_vector = None
         if args and isinstance(args[-1], list) and len(args[-1]) == 3 and isinstance(args[-1][0], int) and isinstance(args[-1][1], int) and isinstance(args[-1][2], str):
@@ -966,39 +1094,39 @@ def sexpr_to_xbar(expr: SExpr, lang: str = "en") -> XBarNode:
                 verb_fr_base = translate_word_from_pivot(op, "fr")
                 if t1 == 0 and t2 == 0 and aspect == "simple":
                     aux_list = []
-                    verb_form = inflect_french_verb(verb_fr_base, "3sg")
+                    verb_form = inflect_french_verb(verb_fr_base, "3pl" if is_plural_subj else ("1sg" if is_1sg_subj else "3sg"))
                 elif t1 == -1 and t2 == 0 and aspect == "simple":
-                    aux_list = ["a"]
+                    aux_list = ["ont"] if is_plural_subj else (["ai"] if is_1sg_subj else ["a"])
                     verb_form = inflect_french_verb(verb_fr_base, "pp")
                 elif t1 == 1 and t2 == 0 and aspect == "simple":
                     aux_list = []
                     verb_form = inflect_french_verb(verb_fr_base, "fut")
                 elif t1 == 0 and t2 == 0 and aspect == "continuous":
-                    aux_list = ["est", "en", "train", "de"]
+                    aux_list = ["sont" if is_plural_subj else ("suis" if is_1sg_subj else "est"), "en", "train", "de"]
                     verb_form = inflect_french_verb(verb_fr_base, "inf")
                 elif t1 == -1 and t2 == 0 and aspect == "continuous":
                     aux_list = []
                     verb_form = inflect_french_verb(verb_fr_base, "imp")
                 elif t1 == 1 and t2 == 0 and aspect == "continuous":
-                    aux_list = ["sera", "en", "train", "de"]
+                    aux_list = ["seront" if is_plural_subj else ("serai" if is_1sg_subj else "sera"), "en", "train", "de"]
                     verb_form = inflect_french_verb(verb_fr_base, "inf")
                 elif t1 == 0 and t2 == -1 and aspect == "simple":
-                    aux_list = ["a"]
+                    aux_list = ["ont"] if is_plural_subj else (["ai"] if is_1sg_subj else ["a"])
                     verb_form = inflect_french_verb(verb_fr_base, "pp")
                 elif t1 == -1 and t2 == -1 and aspect == "simple":
-                    aux_list = ["avait"]
+                    aux_list = ["avaient"] if is_plural_subj else (["avais"] if is_1sg_subj else ["avait"])
                     verb_form = inflect_french_verb(verb_fr_base, "pp")
                 elif t1 == 1 and t2 == -1 and aspect == "simple":
-                    aux_list = ["aura"]
+                    aux_list = ["auront"] if is_plural_subj else (["aurai"] if is_1sg_subj else ["aura"])
                     verb_form = inflect_french_verb(verb_fr_base, "pp")
                 elif t1 == 0 and t2 == -1 and aspect == "continuous":
-                    aux_list = ["a", "été", "en", "train", "de"]
+                    aux_list = ["ont" if is_plural_subj else ("ai" if is_1sg_subj else "a"), "été", "en", "train", "de"]
                     verb_form = inflect_french_verb(verb_fr_base, "inf")
                 elif t1 == -1 and t2 == -1 and aspect == "continuous":
-                    aux_list = ["avait", "été", "en", "train", "de"]
+                    aux_list = ["avaient" if is_plural_subj else ("avais" if is_1sg_subj else "avait"), "été", "en", "train", "de"]
                     verb_form = inflect_french_verb(verb_fr_base, "inf")
                 elif t1 == 1 and t2 == -1 and aspect == "continuous":
-                    aux_list = ["aura", "été", "en", "train", "de"]
+                    aux_list = ["auront" if is_plural_subj else ("aurai" if is_1sg_subj else "aura"), "été", "en", "train", "de"]
                     verb_form = inflect_french_verb(verb_fr_base, "inf")
                 else:
                     aux_list = []
@@ -1049,6 +1177,19 @@ def sexpr_to_xbar(expr: SExpr, lang: str = "en") -> XBarNode:
         else:
             verb_form = translate_word_from_pivot(op, lang)
             aux_list = []
+            if lang == "fr":
+                if is_1sg_subj:
+                    if verb_form in ("est", "am", "is", "être"):
+                        verb_form = "suis"
+                    elif verb_form in ("a", "have", "has", "avoir"):
+                        verb_form = "ai"
+                elif is_plural_subj:
+                    if verb_form in ("est", "are", "is", "être"):
+                        verb_form = "sont"
+                    elif verb_form in ("a", "have", "has", "avoir"):
+                        verb_form = "ont"
+                    elif verb_form.endswith("e"):
+                        verb_form = verb_form + "nt"
 
         if subject_expr == "_":
             v_head = XBarNode(category="V", role="head", label=verb_form)
@@ -1131,7 +1272,7 @@ def sexpr_to_xbar(expr: SExpr, lang: str = "en") -> XBarNode:
                 from englisp.ontology import lookup_word
                 verb_word_fr = lookup_word(verb_form, "fr")
             if lang == "fr" and verb_word_fr in ("chassé", "sauté"):
-                i_label = "a"
+                i_label = "ont" if is_plural_subj else ("ai" if is_1sg_subj else "a")
             i_children = [XBarNode(category="I", role="head", label=i_label)]
             
         i_bar = XBarNode(category="I'", role="bar", children=i_children + [vp_phrase])
@@ -1141,38 +1282,50 @@ def sexpr_to_xbar(expr: SExpr, lang: str = "en") -> XBarNode:
     elif op_cat == "N":
         # Noun operator => translates to NP
         # S-expression format: (noun det adj1 adj2 ... pp_comp ...)
-        noun_word = translate_word_from_pivot(op, lang)
+        is_plural = is_plural_nominal(op)
+        number = "plural" if is_plural else "singular"
+        noun_word = translate_word_from_pivot(op, lang, number=number)
         noun_lookup_word = noun_word
         if noun_word.startswith("n") and len(noun_word) > 1 and noun_word[1].isdigit():
             from englisp.ontology import lookup_word
             noun_lookup_word = lookup_word(noun_word, "fr")
-        gender = FRENCH_GENDER.get(noun_lookup_word, "M") if lang == "fr" else None
+        gender = FRENCH_GENDER.get(noun_lookup_word)
+        if not gender and noun_lookup_word.endswith("s"):
+            gender = FRENCH_GENDER.get(noun_lookup_word[:-1])
+        if not gender:
+            gender = "M" if lang == "fr" else None
+
+        from englisp.parser import PRONOUN_LEXICON
+        is_pronoun = op.lower() in PRONOUN_LEXICON
 
         det_node = None
         pre_adjectives = []
         post_adjectives = []
         post_modifiers = []
 
+        DETERMINER_WORDS = ("the", "a", "an", "this", "that", "these", "those", "my", "your", "his", "her", "its", "our", "their")
+
         for arg in expr[1:]:
             if isinstance(arg, str):
-                if arg in ("the", "a", "an", "this", "that", "my", "your"):
-                    det_label = translate_word_from_pivot(arg, lang, gender)
+                arg_lower = arg.lower()
+                if not is_pronoun and arg_lower in DETERMINER_WORDS:
+                    det_label = translate_word_from_pivot(arg, lang, gender, number=number)
                     det_node = XBarNode(category="Det", role="specifier", label=det_label)
                 else:
                     arg_tags = tag_tokens([arg])
                     arg_cat = arg_tags[0][1] if arg_tags else "N"
-                    if arg_cat == "Det":
-                        det_label = translate_word_from_pivot(arg, lang, gender)
+                    if not is_pronoun and arg_cat == "Det":
+                        det_label = translate_word_from_pivot(arg, lang, gender, number=number)
                         det_node = XBarNode(category="Det", role="specifier", label=det_label)
                     elif arg_cat == "Adj":
-                        adj_label = translate_word_from_pivot(arg, lang, gender)
+                        adj_label = translate_word_from_pivot(arg, lang, gender, number=number)
                         adj_node = XBarNode(category="Adj", role="adjunct", label=adj_label)
                         if lang == "fr" and adj_label not in FRENCH_PRE_ADJECTIVES:
                             post_adjectives.append(adj_node)
                         else:
                             pre_adjectives.append(adj_node)
                     else:
-                        adj_label = translate_word_from_pivot(arg, lang, gender)
+                        adj_label = translate_word_from_pivot(arg, lang, gender, number=number)
                         adj_node = XBarNode(category="Adj", role="adjunct", label=adj_label)
                         if lang == "fr" and adj_label not in FRENCH_PRE_ADJECTIVES:
                             post_adjectives.append(adj_node)

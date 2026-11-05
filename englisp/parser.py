@@ -862,6 +862,8 @@ def generate(node: XBarNode, lang: str = "en") -> str:
         sentence = re.sub(r"\b(le|la)\s+([aeiouyéèàâêîôûhAEIOUYÉÈÀÂÊÎÔÛH])", r"l'\2", sentence)
         # Match 'de' followed by any vowel or 'h'
         sentence = re.sub(r"\bde\s+([aeiouyéèàâêîôûhAEIOUYÉÈÀÂÊÎÔÛH])", r"d'\1", sentence)
+        # Match 'je' followed by any vowel or 'h'
+        sentence = re.sub(r"\bje\s+([aeiouyéèàâêîôûhAEIOUYÉÈÀÂÊÎÔÛH])", r"j'\1", sentence)
         # Note: if there is spaces around the apostrophe like "l' ordinateur" (resulting from clitic separation),
         # remove the space so it renders as a single word "l'ordinateur"
         sentence = re.sub(r"\b(l|d|qu|j|m|t|s|n)'\s+", r"\1'", sentence)
