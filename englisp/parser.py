@@ -288,6 +288,9 @@ def tag_tokens(tokens: List[str], lang: str = "en") -> List[Tuple[str, str]]:
             stem_y = t_lower[:-3] + "y"
             if (stem_y in lex and lex[stem_y] == "N") or (stem_y in full_lex and full_lex[stem_y] == "N") or stem_y in ("strawberry", "berry", "cherry"):
                 tagged.append((token, "N"))
+        elif lang == "en" and idx > 0 and tagged[idx - 1][1] == "I" and t_lower not in ("been", "be", "have", "had", "being"):
+            # Contextual: word after helper modal is a Verb
+            tagged.append((token, "V"))
         elif token in lex:
             tagged.append((token, lex[token]))
         elif token in full_lex and full_lex[token] in ("N", "V", "Adj", "Adv", "Det", "P", "Conj", "C"):
@@ -298,9 +301,6 @@ def tag_tokens(tokens: List[str], lang: str = "en") -> List[Tuple[str, str]]:
             for sfx in plural_suffixes if t_lower.endswith(sfx)
         ):
             tagged.append((token, "N"))
-        elif idx > 0 and tagged[idx - 1][1] == "I":
-            # Contextual: word after helper modal is a Verb
-            tagged.append((token, "V"))
         else:
             suffix_tags = MORPHOLOGY_RULES.get(lang, {}).get("suffix_tags", {})
             matched_tag = None
