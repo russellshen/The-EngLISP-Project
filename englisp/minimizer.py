@@ -57,8 +57,18 @@ POSSESSIVE_DETS = {
 }
 
 
+KNOWN_VERBS = {
+    "run", "wait", "stop", "go", "come", "help", "call", "be", "see", "sleep", "eat",
+    "love", "like", "hate", "want", "need", "know", "try", "win", "lose", "feel",
+    "stand", "sit", "quit", "leave", "fall", "arrive", "look", "listen", "read", "write",
+    "tell", "say", "speak", "talk", "hear", "buy", "make", "take", "give", "find"
+}
+
 def get_pos(word: str) -> str:
     """Helper to check the part of speech of a word."""
+    w_lower = word.lower()
+    if w_lower in KNOWN_VERBS:
+        return "V"
     tags = tag_tokens([word])
     return tags[0][1] if tags else "N"
 
@@ -337,6 +347,8 @@ def expand_sexpr(expr: SExpr, is_head: bool = False) -> SExpr:
     if isinstance(expr, str):
         if not is_head:
             expr_lower = expr.lower()
+            if expr_lower in ("_", ""):
+                return expr
             if expr_lower in POSSESSIVE_DETS:
                 return expr
             if expr_lower in PRONOUNS_NO_DET:
@@ -367,6 +379,10 @@ def expand_sexpr(expr: SExpr, is_head: bool = False) -> SExpr:
         noun = op
         noun_lower = noun.lower()
         if noun_lower in PRONOUNS_NO_DET or noun_lower == "blame":
+            return exp_children
+
+        # Check if this is a propositional sentence [verb, subject, ...] where verb was tagged N
+        if len(exp_children) > 1 and (isinstance(exp_children[1], list) or (isinstance(exp_children[1], str) and exp_children[1].lower() in PRONOUNS_NO_DET)):
             return exp_children
 
         det = "the" # Default determiner

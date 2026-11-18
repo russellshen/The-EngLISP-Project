@@ -29,20 +29,37 @@ from englisp.loader import (
 # A type representing a parsed S-Expression in Python (nested lists of strings)
 SExpr = Union[str, List[Any]]
 
+IRREGULAR_FRENCH_VERBS = {
+    "être": {"1sg": "suis", "2sg": "es", "3sg": "est", "1pl": "sommes", "2pl": "êtes", "3pl": "sont", "imp": "était", "fut": "sera", "cond": "serait", "pp": "été", "inf": "être", "imp_pres": "sois"},
+    "est": {"1sg": "suis", "2sg": "es", "3sg": "est", "1pl": "sommes", "2pl": "êtes", "3pl": "sont", "imp": "était", "fut": "sera", "cond": "serait", "pp": "été", "inf": "être", "imp_pres": "sois"},
+    "suis": {"1sg": "suis", "2sg": "es", "3sg": "est", "1pl": "sommes", "2pl": "êtes", "3pl": "sont", "imp": "était", "fut": "sera", "cond": "serait", "pp": "été", "inf": "être", "imp_pres": "sois"},
+    "avoir": {"1sg": "ai", "2sg": "as", "3sg": "a", "1pl": "avons", "2pl": "avez", "3pl": "ont", "imp": "avait", "fut": "aura", "cond": "aurait", "pp": "eu", "inf": "avoir", "imp_pres": "aie"},
+    "a": {"1sg": "ai", "2sg": "as", "3sg": "a", "1pl": "avons", "2pl": "avez", "3pl": "ont", "imp": "avait", "fut": "aura", "cond": "aurait", "pp": "eu", "inf": "avoir", "imp_pres": "aie"},
+    "vouloir": {"1sg": "veux", "2sg": "veux", "3sg": "veut", "1pl": "voulons", "2pl": "voulez", "3pl": "veulent", "imp": "voulait", "fut": "voudra", "cond": "voudrait", "pp": "voulu", "inf": "vouloir"},
+    "pouvoir": {"1sg": "peux", "2sg": "peux", "3sg": "peut", "1pl": "pouvons", "2pl": "pouvez", "3pl": "peuvent", "imp": "pouvait", "fut": "pourra", "cond": "pourrait", "pp": "pu", "inf": "pouvoir"},
+    "devoir": {"1sg": "dois", "2sg": "dois", "3sg": "doit", "1pl": "devons", "2pl": "devez", "3pl": "doivent", "imp": "devait", "fut": "devra", "cond": "devrait", "pp": "dû", "inf": "devoir"},
+    "aller": {"1sg": "vais", "2sg": "vas", "3sg": "va", "1pl": "allons", "2pl": "allez", "3pl": "vont", "imp": "allait", "fut": "ira", "cond": "irait", "pp": "allé", "inf": "aller", "imp_pres": "va"},
+    "venir": {"1sg": "viens", "2sg": "viens", "3sg": "vient", "1pl": "venons", "2pl": "venez", "3pl": "viennent", "imp": "venait", "fut": "viendra", "cond": "viendrait", "pp": "venu", "inf": "venir"},
+    "faire": {"1sg": "fais", "2sg": "fais", "3sg": "fait", "1pl": "faisons", "2pl": "faites", "3pl": "font", "imp": "faisait", "fut": "fera", "cond": "ferait", "pp": "fait", "inf": "faire"},
+    "dire": {"1sg": "dis", "2sg": "dis", "3sg": "dit", "1pl": "disons", "2pl": "dites", "3pl": "disent", "imp": "disait", "fut": "dira", "cond": "dirait", "pp": "dit", "inf": "dire"},
+    "voir": {"1sg": "vois", "2sg": "vois", "3sg": "voit", "1pl": "voyons", "2pl": "voyez", "3pl": "voient", "imp": "voyait", "fut": "verra", "cond": "verrait", "pp": "vu", "inf": "voir"},
+    "prendre": {"1sg": "prends", "2sg": "prends", "3sg": "prend", "1pl": "prenons", "2pl": "prenez", "3pl": "prennent", "imp": "prenait", "fut": "prendra", "cond": "prendrait", "pp": "pris", "inf": "prendre"},
+    "savoir": {"1sg": "sais", "2sg": "sais", "3sg": "sait", "1pl": "savons", "2pl": "savez", "3pl": "savent", "imp": "savait", "fut": "saura", "cond": "saurait", "pp": "su", "inf": "savoir"},
+    "dormir": {"1sg": "dors", "2sg": "dors", "3sg": "dort", "1pl": "dormons", "2pl": "dormez", "3pl": "dorment", "imp": "dormait", "fut": "dormira", "cond": "dormirait", "pp": "dormi", "inf": "dormir"},
+    "partir": {"1sg": "pars", "2sg": "pars", "3sg": "part", "1pl": "partons", "2pl": "partez", "3pl": "partent", "imp": "partait", "fut": "partira", "cond": "partirait", "pp": "parti", "inf": "partir"},
+    "entendre": {"1sg": "entends", "2sg": "entends", "3sg": "entend", "1pl": "entendons", "2pl": "entendez", "3pl": "entendent", "imp": "entendait", "fut": "entendra", "cond": "entendrait", "pp": "entendu", "inf": "entendre"},
+    "attendre": {"1sg": "attends", "2sg": "attends", "3sg": "attend", "1pl": "attendons", "2pl": "attendez", "3pl": "attendent", "imp": "attendait", "fut": "attendra", "cond": "attendrait", "pp": "attendu", "inf": "attendre"},
+    "courir": {"1sg": "cours", "2sg": "cours", "3sg": "court", "1pl": "courons", "2pl": "courez", "3pl": "courent", "imp": "courait", "fut": "courra", "cond": "courrait", "pp": "couru", "inf": "courir", "imp_pres": "cours"},
+    "aider": {"1sg": "aide", "2sg": "aides", "3sg": "aide", "1pl": "aidons", "2pl": "aidez", "3pl": "aident", "imp": "aidait", "fut": "aidera", "cond": "aiderait", "pp": "aidé", "inf": "aider", "imp_pres": "aide"},
+}
+
 def inflect_verb(base: str, form_type: str, lang: str) -> str:
     base = base.lower()
     # 1. Database forms lookup
     forms_dict = FRENCH_VERB_FORMS if lang == "fr" else ENGLISH_VERB_FORMS
     if lang == "fr":
-        # Irregular copula / auxiliary handling
-        if base in ("être", "est", "suis", "es"):
-            cop_map = {"1sg": "suis", "2sg": "es", "3sg": "est", "1pl": "sommes", "2pl": "êtes", "3pl": "sont", "imp": "était", "fut": "sera", "pp": "été", "inf": "être"}
-            if form_type in cop_map:
-                return cop_map[form_type]
-        elif base in ("avoir", "a", "ai", "as"):
-            aux_map = {"1sg": "ai", "2sg": "as", "3sg": "a", "1pl": "avons", "2pl": "avez", "3pl": "ont", "imp": "avait", "fut": "aura", "pp": "eu", "inf": "avoir"}
-            if form_type in aux_map:
-                return aux_map[form_type]
+        if base in IRREGULAR_FRENCH_VERBS and form_type in IRREGULAR_FRENCH_VERBS[base]:
+            return IRREGULAR_FRENCH_VERBS[base][form_type]
 
     if base in forms_dict:
         forms = forms_dict[base]
@@ -53,10 +70,14 @@ def inflect_verb(base: str, form_type: str, lang: str) -> str:
         if form_type in idx_map:
             return forms[idx_map[form_type]]
         elif lang == "fr" and form_type == "3pl":
-            # For regular 1st group (-er) verbs, 3pl ends in -ent
             if forms[0].endswith("e"):
                 return forms[0] + "nt"
+            return forms[0]
         elif lang == "fr" and form_type == "1sg":
+            if forms[0].endswith("e"):
+                return forms[0]
+            elif forms[0].endswith(("t", "d")):
+                return forms[0][:-1] + "s"
             return forms[0]
     
     # 2. General morphological rules (parameterized by lang)
@@ -78,21 +99,37 @@ def inflect_verb(base: str, form_type: str, lang: str) -> str:
                 return base[:-1] + "ing"
             return base + "ing"
     elif lang == "fr":
-        stem = base[:-1] if base.endswith("e") else base
-        if form_type == "3sg":
-            return stem + "e"
+        if base.endswith("er"):
+            stem = base[:-2]
+        elif base.endswith("e"):
+            stem = base[:-1]
+        elif base.endswith(("ir", "re")):
+            stem = base[:-2]
+        else:
+            stem = base
+
+        if form_type in ("3sg", "1sg"):
+            return (stem + "e") if base.endswith("er") else stem
+        elif form_type == "imp_pres":
+            if base in ("va", "vas"):
+                return "va"
+            if base.endswith(("e", "é")):
+                return base
+            return (stem + "e") if base.endswith("er") else (stem + "s")
+        elif form_type == "2sg":
+            return (stem + "es") if base.endswith("er") else (stem + "s")
+        elif form_type == "1pl":
+            return stem + "ons"
+        elif form_type == "2pl":
+            return stem + "ez"
         elif form_type == "3pl":
             return stem + "ent"
-        elif form_type == "1sg":
-            return stem + "e"
-        elif form_type == "imp":
-            return stem + "ait"
-        elif form_type == "fut":
-            return stem + "era"
         elif form_type == "pp":
+            if base.endswith(("é", "i", "u", "s", "t")):
+                return base
             return stem + "é"
         elif form_type == "inf":
-            return stem + "er"
+            return base if base.endswith(("er", "ir", "re")) else stem + "er"
     return base
 
 FRENCH_FUNCTION_WORDS_TO_ENGLISH = {
@@ -296,7 +333,126 @@ def is_1sg_nominal(expr: Any) -> bool:
         return False
     return head.lower() in ("i", "je", "j'", "me", "moi")
 
-def translate_word_from_pivot(word: str, target_lang: str, gender: Optional[str] = None, number: str = "singular") -> str:
+def is_2sg_nominal(expr: Any) -> bool:
+    """Checks whether an expression represents a 2nd person singular nominal constituent."""
+    if isinstance(expr, list) and len(expr) > 0:
+        head = expr[0]
+    elif isinstance(expr, str):
+        head = expr
+    else:
+        return False
+    if not isinstance(head, str):
+        return False
+    return head.lower() in ("tu", "toi")
+
+def is_1pl_nominal(expr: Any) -> bool:
+    """Checks whether an expression represents a 1st person plural nominal constituent."""
+    if isinstance(expr, list) and len(expr) > 0:
+        head = expr[0]
+    elif isinstance(expr, str):
+        head = expr
+    else:
+        return False
+    if not isinstance(head, str):
+        return False
+    return head.lower() in ("we", "nous")
+
+def is_2pl_nominal(expr: Any) -> bool:
+    """Checks whether an expression represents a 2nd person plural nominal constituent."""
+    if isinstance(expr, list) and len(expr) > 0:
+        head = expr[0]
+    elif isinstance(expr, str):
+        head = expr
+    else:
+        return False
+    if not isinstance(head, str):
+        return False
+    return head.lower() in ("vous",)
+
+VERBS_EN_TO_FR = {
+    "have": "avoir", "has": "a", "had": "eu",
+    "am": "suis", "is": "est", "are": "sont", "was": "était", "were": "étaient", "be": "être",
+    "sleep": "dormir", "sleeps": "dort", "slept": "dormi",
+    "love": "aimer", "loves": "aime", "loved": "aimé",
+    "like": "aimer", "likes": "aime", "liked": "aimé",
+    "hate": "détester", "hates": "déteste", "hated": "détesté",
+    "want": "vouloir", "wants": "veut", "wanted": "voulu",
+    "need": "avoir besoin de", "needs": "a besoin de", "needed": "eu besoin de",
+    "know": "savoir", "knows": "sait", "knew": "su",
+    "see": "voir", "sees": "voit", "saw": "vu",
+    "run": "courir", "runs": "court", "ran": "couru",
+    "eat": "manger", "eats": "mange", "ate": "mangé",
+    "help": "aider", "helps": "aide", "helped": "aidé",
+    "call": "appeler", "calls": "appelle", "called": "appelé",
+    "stop": "arrêter", "stops": "arrête", "stopped": "arrêté",
+    "wait": "attendre", "waits": "attend", "waited": "attendu",
+    "fall": "tomber", "falls": "tombe", "fell": "tombé",
+    "leave": "partir", "leaves": "part", "left": "parti",
+    "go": "aller", "goes": "va", "went": "allé",
+    "come": "venir", "comes": "vient", "came": "venu",
+    "arrive": "arriver", "arrives": "arrive", "arrived": "arrivé",
+    "try": "essayer", "tries": "essaye", "tried": "essayé",
+    "win": "gagner", "wins": "gagne", "won": "gagné",
+    "lose": "perdre", "loses": "perd", "lost": "perdu",
+    "tell": "dire", "tells": "dit", "told": "dit",
+    "say": "dire", "says": "dit", "said": "dit",
+    "speak": "parler", "speaks": "parle", "spoke": "parlé",
+    "talk": "parler", "talks": "parle", "talked": "parlé",
+    "listen": "écouter", "listens": "écoute", "listened": "écouté",
+    "look": "regarder", "looks": "regarde", "looked": "regardé",
+    "read": "lire", "reads": "lit",
+    "write": "écrire", "writes": "écrit", "wrote": "écrit",
+    "find": "trouver", "finds": "trouve", "found": "trouvé",
+    "give": "donner", "gives": "donne", "gave": "donné",
+    "take": "prendre", "takes": "prend", "took": "pris",
+    "understand": "comprendre", "understands": "comprend", "understood": "compris",
+    "remember": "se rappeler", "remembers": "se rappelle", "remembered": "se rappelait",
+    "feel": "se sentir", "feels": "se sent", "felt": "s'est senti",
+    "become": "devenir", "becomes": "devient", "became": "devenu",
+    "buy": "acheter", "buys": "achète", "bought": "acheté",
+    "make": "faire", "makes": "fait", "made": "fait",
+    "do": "faire", "does": "fait", "did": "fait",
+    "quit": "arrêter", "quits": "arrête",
+    "smoke": "fumer", "smokes": "fume", "smoked": "fumé",
+    "peel": "éplucher", "peels": "épluche", "peeled": "épluché",
+}
+
+COMMON_WORDS_EN_TO_FR = {
+    "friend": "ami", "friends": "amis",
+    "boss": "patron", "brother": "frère", "sister": "sœur",
+    "father": "père", "mother": "mère", "family": "famille",
+    "doctor": "médecin", "camera": "appareil photo",
+    "mathematics": "mathématiques", "math": "maths",
+    "heat": "chaleur", "smoking": "fumer", "explanation": "explication",
+    "week": "semaine", "month": "mois", "year": "an",
+    "fruit": "fruit", "fruits": "fruits",
+    "tie": "cravate", "mailbox": "boîte aux lettres",
+    "birthday": "anniversaire", "movie": "film",
+    "potatoes": "pommes de terre", "carrots": "carottes",
+    "tea": "thé", "art": "art", "cpr": "rcp", "ice": "glace",
+    "breakfast": "petit-déjeuner", "lunch": "déjeuner", "dinner": "dîner",
+    "teacher": "professeur", "teachers": "professeurs",
+    "student": "étudiant", "students": "étudiants",
+    "school": "école", "library": "bibliothèque", "books": "livres",
+    "paper": "papier", "china": "chine", "greece": "grèce",
+    "fur": "fourrure", "luster": "splendeur", "wages": "salaire",
+    "taxes": "impôts", "tax": "impôt", "opposition": "opposition",
+    "bill": "texte de loi", "onions": "oignons", "onion": "oignon",
+    "troops": "troupes", "enemy": "ennemi", "uncle": "oncle",
+    "ticket": "billet", "tickets": "places de cinéma",
+    "word": "mot", "words": "mots", "man": "homme", "men": "hommes",
+    "son": "fils", "sons": "fils", "boy": "garçon", "boys": "garçons",
+    "calm": "calme", "sad": "triste", "ready": "prêt", "happy": "heureux",
+    "once": "une fois que"
+}
+
+FRENCH_UNACCUSATIVES = {
+    "tomber", "partir", "aller", "venir", "arriver", "entrer", "sortir", 
+    "mourir", "naître", "rester", "devenir", "revenir", "monter", "descendre",
+    "fall", "leave", "go", "come", "arrive", "enter", "exit", "die", "stay", "become", "return"
+}
+
+def translate_word_from_pivot(word: str, target_lang: str, gender: Optional[str] = None, number: str = "singular", pos: Optional[str] = None) -> str:
     """Translates an English pivot word to the target language (e.g. French)."""
     if target_lang != "fr":
         return word
@@ -378,20 +534,28 @@ def translate_word_from_pivot(word: str, target_lang: str, gender: Optional[str]
 
     # Check translation vocabulary
     translated = None
-    from englisp.loader import LEXICON
-    is_verb = (LEXICON.get(word_lower) == "V") or (word_lower.endswith("s") and LEXICON.get(word_lower[:-1]) == "V")
-    if not is_verb and word_lower.endswith("ies") and len(word_lower) > 3:
-        stem_y = word_lower[:-3] + "y"
-        if stem_y in ENGLISH_TO_FRENCH_VOCAB:
-            translated = ENGLISH_TO_FRENCH_VOCAB[stem_y] + "s"
-    elif not is_verb and word_lower.endswith("es") and len(word_lower) > 3:
-        stem_e = word_lower[:-2]
-        if stem_e in ENGLISH_TO_FRENCH_VOCAB:
-            translated = ENGLISH_TO_FRENCH_VOCAB[stem_e] + "s"
-    elif not is_verb and word_lower.endswith("s") and word_lower not in ("this", "its", "his", "their", "them", "us", "yes"):
-        singular = word_lower[:-1]
-        if singular in ENGLISH_TO_FRENCH_VOCAB:
-            translated = ENGLISH_TO_FRENCH_VOCAB[singular] + "s"
+    if pos == "V" and word_lower in VERBS_EN_TO_FR:
+        translated = VERBS_EN_TO_FR[word_lower]
+    elif word_lower in COMMON_WORDS_EN_TO_FR:
+        translated = COMMON_WORDS_EN_TO_FR[word_lower]
+    elif word_lower in VERBS_EN_TO_FR:
+        translated = VERBS_EN_TO_FR[word_lower]
+
+    if not translated:
+        from englisp.loader import LEXICON
+        is_verb = (LEXICON.get(word_lower) == "V") or (word_lower.endswith("s") and LEXICON.get(word_lower[:-1]) == "V")
+        if not is_verb and word_lower.endswith("ies") and len(word_lower) > 3:
+            stem_y = word_lower[:-3] + "y"
+            if stem_y in ENGLISH_TO_FRENCH_VOCAB:
+                translated = ENGLISH_TO_FRENCH_VOCAB[stem_y] + "s"
+        elif not is_verb and word_lower.endswith("es") and len(word_lower) > 3:
+            stem_e = word_lower[:-2]
+            if stem_e in ENGLISH_TO_FRENCH_VOCAB:
+                translated = ENGLISH_TO_FRENCH_VOCAB[stem_e] + "s"
+        elif not is_verb and word_lower.endswith("s") and word_lower not in ("this", "its", "his", "their", "them", "us", "yes"):
+            singular = word_lower[:-1]
+            if singular in ENGLISH_TO_FRENCH_VOCAB:
+                translated = ENGLISH_TO_FRENCH_VOCAB[singular] + "s"
     if not translated:
         translated = ENGLISH_TO_FRENCH_VOCAB.get(word_lower, word)
     
@@ -635,18 +799,26 @@ def xbar_to_sexpr(node: XBarNode, lang: str = "en") -> SExpr:
                 i_bar = child
 
         if not i_bar:
-            raise ValueError("Invalid IP node: missing I' bar node.")
+            if len(node.children) == 1 and node.children[0].category == "VP":
+                vp_node = node.children[0]
+            elif len(node.children) == 1 and node.children[0].category == "I'":
+                i_bar = node.children[0]
+            else:
+                raise ValueError("Invalid IP node: missing I' bar node.")
 
         # Find I heads and VP complement inside I'
         aux_words = []
-        vp_node = None
-        for child in i_bar.children:
-            if child.category == "I":
-                lbl = child.label
-                if lbl and not (lbl.startswith("[") and lbl.endswith("]")):
-                    aux_words.append(lbl.lower())
-            elif child.category == "VP" and child.role == "complement":
-                vp_node = child
+        is_negated = False
+        if i_bar:
+            for child in i_bar.children:
+                if child.category == "I":
+                    lbl = child.label
+                    if lbl and not (lbl.startswith("[") and lbl.endswith("]")):
+                        aux_words.append(lbl.lower())
+                elif child.category == "Neg" or (child.label and child.label.lower() == "not"):
+                    is_negated = True
+                elif child.category == "VP" and child.role == "complement":
+                    vp_node = child
 
         if not vp_node:
             raise ValueError("Invalid I' node: missing VP complement.")
@@ -678,7 +850,10 @@ def xbar_to_sexpr(node: XBarNode, lang: str = "en") -> SExpr:
 
         if quantifier and noun_label:
             subj_sexpr = "_"
+        elif subject_np:
+            subj_sexpr = xbar_to_sexpr(subject_np, lang)
         else:
+            subj_sexpr = "_"
             subj_sexpr = xbar_to_sexpr(subject_np, lang) if subject_np else ""
 
         # Canonicalize VP
@@ -727,11 +902,14 @@ def xbar_to_sexpr(node: XBarNode, lang: str = "en") -> SExpr:
             sentence_sexpr.extend(arguments)
             sentence_sexpr.append([t1, t2, aspect])
 
-        modals = [w for w in aux_words if w not in TENSE_AUXILIARIES]
+        modals = [w for w in aux_words if w not in TENSE_AUXILIARIES and w not in ("do", "does", "did")]
         if modals:
             modal_pivot = translate_word_from_pivot(modals[0], "en")
             sentence_sexpr = [modal_pivot, sentence_sexpr]
         
+        if is_negated:
+            sentence_sexpr = ["not", sentence_sexpr]
+
         if quantifier and noun_label:
             return [quantifier, noun_label, sentence_sexpr]
         
@@ -914,7 +1092,19 @@ def sexpr_to_xbar(expr: SExpr, lang: str = "en") -> XBarNode:
         subject_np = XBarNode(category="NP", role="phrase", children=[det_head, n_bar])
         subject_np.role = "specifier"
         
-        body_xbar = sexpr_to_xbar(body_expr, lang)
+        if isinstance(body_expr, list) and len(body_expr) > 1 and body_expr[1] == "_":
+            body_expr_eval = [body_expr[0], expr[1]] + body_expr[2:]
+            body_xbar_full = sexpr_to_xbar(body_expr_eval, lang)
+            body_vp = None
+            for child in body_xbar_full.children:
+                if child.category == "I'":
+                    for gc in child.children:
+                        if gc.category == "VP":
+                            body_vp = gc
+                            break
+            body_xbar = body_vp if body_vp else body_xbar_full
+        else:
+            body_xbar = sexpr_to_xbar(body_expr, lang)
         body_xbar.role = "complement"
         
         i_label = "[pres/past]"
@@ -932,9 +1122,56 @@ def sexpr_to_xbar(expr: SExpr, lang: str = "en") -> XBarNode:
         
         return XBarNode(category="IP", role="phrase", children=[subject_np, i_bar])
 
+    if op == "not":
+        if len(expr) < 2:
+            raise ValueError("Negation expression requires a body argument.")
+        body_node = sexpr_to_xbar(expr[1], lang)
+        if lang == "fr":
+            ne_node = XBarNode(category="Adv", role="adjunct", label="ne")
+            pas_node = XBarNode(category="Adv", role="adjunct", label="pas")
+            i_bar = None
+            for child in body_node.children:
+                if child.category == "I'" and child.role == "bar":
+                    i_bar = child
+            if i_bar and len(i_bar.children) > 0:
+                first_head = i_bar.children[0]
+                if first_head.category == "I" and not (first_head.label and first_head.label.startswith("[") and first_head.label.endswith("]")):
+                    i_bar.children = [ne_node, first_head, pas_node] + i_bar.children[1:]
+                else:
+                    for c in i_bar.children:
+                        if c.category == "VP" and len(c.children) > 0 and len(c.children[0].children) > 0:
+                            v_bar = c.children[0]
+                            v_head = v_bar.children[0]
+                            v_bar.children = [ne_node, v_head, pas_node] + v_bar.children[1:]
+                            break
+        else:
+            not_node = XBarNode(category="Adv", role="adjunct", label="not")
+            i_bar = None
+            for child in body_node.children:
+                if child.category == "I'" and child.role == "bar":
+                    i_bar = child
+            if i_bar:
+                i_bar.children.insert(1, not_node)
+        return body_node
+
     # Tag the English operator to determine its role (V = Sentence/IP, N = NP, P = PP, I = Modal Sentence)
     tags = tag_tokens([op])
     op_cat = tags[0][1] if tags else "N"
+    if op.lower() in ("can", "could", "should", "would", "might", "may", "must", "will", "shall", "cannot", "doesnt", "dont", "isnt", "hasnt", "havent", "wont", "wouldnt", "shouldnt", "couldnt"):
+        op_cat = "I"
+    elif op_cat in ("Conj", "C"):
+        pass
+    elif op_cat == "P" and len(expr) == 2:
+        pass
+    elif op.lower() in ("in", "on", "at", "to", "from", "with", "for", "by", "under", "over", "between", "like") and len(expr) == 2:
+        op_cat = "P"
+    elif op.lower() in VERBS_EN_TO_FR:
+        op_cat = "V"
+    elif len(expr) > 1 and op_cat not in ("Conj", "C", "P", "I"):
+        first_arg = expr[1]
+        is_pp = isinstance(first_arg, list) and len(first_arg) > 0 and isinstance(first_arg[0], str) and first_arg[0].lower() in ("in", "on", "at", "to", "from", "with", "for", "by", "under", "over", "between", "like")
+        if not is_pp and (isinstance(first_arg, list) or (isinstance(first_arg, str) and first_arg.lower() in ("i", "you", "he", "she", "we", "they", "it", "_"))):
+            op_cat = "V"
 
     if op_cat == "Conj":
         # Coordinate structure: ["and", left_expr, right_expr]
@@ -1168,14 +1405,18 @@ def sexpr_to_xbar(expr: SExpr, lang: str = "en") -> XBarNode:
         # Verb operator => translates to IP (Sentence)
         # S-expression format: (verb subject complements/adjuncts...)
         
-        if len(expr) < 2:
-            raise ValueError(f"Verb expression '{op}' requires at least a subject argument.")
-        
-        subject_expr = expr[1]
-        args = expr[2:]
+        if len(expr) == 1:
+            subject_expr = "_"
+            args = []
+        else:
+            subject_expr = expr[1]
+            args = expr[2:]
         
         is_plural_subj = is_plural_nominal(subject_expr)
         is_1sg_subj = is_1sg_nominal(subject_expr)
+        is_2sg_subj = is_2sg_nominal(subject_expr)
+        is_1pl_subj = is_1pl_nominal(subject_expr)
+        is_2pl_subj = is_2pl_nominal(subject_expr)
 
         # Check for tense vector at the end of args
         tense_vector = None
@@ -1187,12 +1428,27 @@ def sexpr_to_xbar(expr: SExpr, lang: str = "en") -> XBarNode:
         if tense_vector:
             t1, t2, aspect = tense_vector
             if lang == "fr":
-                verb_fr_base = translate_word_from_pivot(op, "fr")
+                verb_fr_base = translate_word_from_pivot(op, "fr", pos="V")
                 if t1 == 0 and t2 == 0 and aspect == "simple":
                     aux_list = []
-                    verb_form = inflect_french_verb(verb_fr_base, "3pl" if is_plural_subj else ("1sg" if is_1sg_subj else "3sg"))
+                    if is_1sg_subj:
+                        verb_form = inflect_french_verb(verb_fr_base, "1sg")
+                    elif is_2sg_subj:
+                        verb_form = inflect_french_verb(verb_fr_base, "2sg")
+                    elif is_1pl_subj:
+                        verb_form = inflect_french_verb(verb_fr_base, "1pl")
+                    elif is_2pl_subj:
+                        verb_form = inflect_french_verb(verb_fr_base, "2pl")
+                    elif is_plural_subj:
+                        verb_form = inflect_french_verb(verb_fr_base, "3pl")
+                    else:
+                        verb_form = inflect_french_verb(verb_fr_base, "3sg")
                 elif t1 == -1 and t2 == 0 and aspect == "simple":
-                    aux_list = ["ont"] if is_plural_subj else (["ai"] if is_1sg_subj else ["a"])
+                    is_unacc = op.lower() in FRENCH_UNACCUSATIVES or verb_fr_base.lower() in FRENCH_UNACCUSATIVES
+                    if is_unacc:
+                        aux_list = ["sont"] if is_plural_subj else (["suis"] if is_1sg_subj else (["sommes"] if is_1pl_subj else (["êtes"] if is_2pl_subj else (["es"] if is_2sg_subj else ["est"]))))
+                    else:
+                        aux_list = ["ont"] if is_plural_subj else (["ai"] if is_1sg_subj else (["avons"] if is_1pl_subj else (["avez"] if is_2pl_subj else (["as"] if is_2sg_subj else ["a"]))))
                     verb_form = inflect_french_verb(verb_fr_base, "pp")
                 elif t1 == 1 and t2 == 0 and aspect == "simple":
                     aux_list = []
@@ -1226,7 +1482,7 @@ def sexpr_to_xbar(expr: SExpr, lang: str = "en") -> XBarNode:
                     verb_form = inflect_french_verb(verb_fr_base, "inf")
                 else:
                     aux_list = []
-                    verb_form = translate_word_from_pivot(op, "fr")
+                    verb_form = translate_word_from_pivot(op, "fr", pos="V")
                 if aux_list and aux_list[-1] == "de" and verb_form and verb_form.lower()[0] in "aeiouyéèàâêîôû":
                     aux_list[-1] = "d'"
             else:
@@ -1271,21 +1527,33 @@ def sexpr_to_xbar(expr: SExpr, lang: str = "en") -> XBarNode:
                     aux_list = []
                     verb_form = op
         else:
-            verb_form = translate_word_from_pivot(op, lang)
+            verb_form = translate_word_from_pivot(op, lang, pos="V")
             aux_list = []
             if lang == "fr":
-                if is_1sg_subj:
-                    if verb_form in ("est", "am", "is", "être"):
-                        verb_form = "suis"
-                    elif verb_form in ("a", "have", "has", "avoir"):
-                        verb_form = "ai"
-                elif is_plural_subj:
-                    if verb_form in ("est", "are", "is", "être"):
-                        verb_form = "sont"
-                    elif verb_form in ("a", "have", "has", "avoir"):
-                        verb_form = "ont"
-                    elif verb_form.endswith("e"):
-                        verb_form = verb_form + "nt"
+                op_low = op.lower()
+                is_past_form = op_low in ("fell", "left", "went", "came", "saw", "ate", "made", "bought", "won", "lost", "fixed", "tried", "met", "said", "promised", "slept") or op_low.endswith("ed")
+                if is_past_form:
+                    is_unacc = op_low in ("fell", "left", "went", "came") or op_low in FRENCH_UNACCUSATIVES or verb_form.lower() in FRENCH_UNACCUSATIVES
+                    if is_unacc:
+                        aux_list = ["sont"] if is_plural_subj else (["suis"] if is_1sg_subj else (["sommes"] if is_1pl_subj else (["êtes"] if is_2pl_subj else (["es"] if is_2sg_subj else ["est"]))))
+                    else:
+                        aux_list = ["ont"] if is_plural_subj else (["ai"] if is_1sg_subj else (["avons"] if is_1pl_subj else (["avez"] if is_2pl_subj else (["as"] if is_2sg_subj else ["a"]))))
+                    verb_form = inflect_french_verb(verb_form, "pp")
+                else:
+                    if subject_expr == "_":
+                        verb_form = IRREGULAR_FRENCH_VERBS.get(verb_form, {}).get("imp_pres") or inflect_french_verb(verb_form, "imp_pres")
+                    elif is_1sg_subj:
+                        verb_form = inflect_french_verb(verb_form, "1sg")
+                    elif is_2sg_subj:
+                        verb_form = inflect_french_verb(verb_form, "2sg")
+                    elif is_1pl_subj:
+                        verb_form = inflect_french_verb(verb_form, "1pl")
+                    elif is_2pl_subj:
+                        verb_form = inflect_french_verb(verb_form, "2pl")
+                    elif is_plural_subj:
+                        verb_form = inflect_french_verb(verb_form, "3pl")
+                    else:
+                        verb_form = inflect_french_verb(verb_form, "3sg")
 
         if subject_expr == "_":
             v_head = XBarNode(category="V", role="head", label=verb_form)
@@ -1326,6 +1594,40 @@ def sexpr_to_xbar(expr: SExpr, lang: str = "en") -> XBarNode:
             arg_node = sexpr_to_xbar(arg_expr, lang)
             vp_children.append(arg_node)
 
+        # Check for French clitic object movement
+        clitic_node = None
+        if lang == "fr" and subject_expr != "_":
+            FRENCH_PRONOUN_CLITICS = {
+                "you": "te", "him": "le", "her": "la", "it": "le", "them": "les", "us": "nous", "me": "me",
+                "vous": "vous", "te": "te", "le": "le", "la": "la", "les": "les", "nous": "nous", "lui": "lui", "leur": "leur"
+            }
+            clitic_idx = -1
+            for i, child in enumerate(vp_children[1:], start=1):
+                if child.category == "NP":
+                    # An NP with a determiner (e.g. 'le livre') is a full noun phrase, not a clitic pronoun!
+                    has_det = any(c.category == "Det" for c in child.children)
+                    if has_det:
+                        continue
+                    head_noun = ""
+                    for desc in child.children:
+                        if desc.category == "N'" and desc.children:
+                            for c in desc.children:
+                                if c.category in ("N", "Pron") and c.label:
+                                    head_noun = c.label.lower()
+                                    break
+                    if not head_noun and child.children:
+                        for c in child.children:
+                            if c.category in ("N", "Pron") and c.label:
+                                head_noun = c.label.lower()
+                                break
+                    if head_noun in FRENCH_PRONOUN_CLITICS:
+                        clitic_label = FRENCH_PRONOUN_CLITICS[head_noun]
+                        clitic_node = XBarNode(category="Clitic", role="adjunct", label=clitic_label)
+                        clitic_idx = i
+                        break
+            if clitic_idx != -1:
+                vp_children.pop(clitic_idx)
+
         # Reconstruct V' bar
         first_np_idx = -1
         for i, child in enumerate(vp_children[1:], start=1):
@@ -1339,6 +1641,12 @@ def sexpr_to_xbar(expr: SExpr, lang: str = "en") -> XBarNode:
             v_bar = XBarNode(category="V'", role="bar", children=core_v_bar_children)
         else:
             v_bar = XBarNode(category="V'", role="bar", children=[v_head])
+
+        if clitic_node:
+            if aux_list:
+                aux_list.insert(0, clitic_node.label)
+            else:
+                v_bar.children = [clitic_node] + v_bar.children
 
         # Add remaining arguments as adjuncts or complements wrapping V'
         for i, child in enumerate(vp_children[1:], start=1):
@@ -1428,7 +1736,7 @@ def sexpr_to_xbar(expr: SExpr, lang: str = "en") -> XBarNode:
                         else:
                             pre_adjectives.append(adj_node)
             else:
-                # Nested list (PP/CP)
+                # Nested list (PP/CP/NP)
                 child_xbar = sexpr_to_xbar(arg, lang)
                 if child_xbar.category == "PP":
                     child_xbar.role = "complement"
@@ -1436,6 +1744,13 @@ def sexpr_to_xbar(expr: SExpr, lang: str = "en") -> XBarNode:
                 elif child_xbar.category == "CP":
                     child_xbar.role = "adjunct"
                     post_modifiers.append(child_xbar)
+                elif child_xbar.category == "NP" and lang == "fr":
+                    de_head = XBarNode(category="P", role="head", label="de")
+                    child_xbar.role = "complement"
+                    p_bar = XBarNode(category="P'", role="bar", children=[de_head, child_xbar])
+                    pp_node = XBarNode(category="PP", role="phrase", children=[p_bar])
+                    pp_node.role = "complement"
+                    post_modifiers.append(pp_node)
                 else:
                     child_xbar.role = "adjunct"
                     post_modifiers.append(child_xbar)
@@ -1459,9 +1774,16 @@ def sexpr_to_xbar(expr: SExpr, lang: str = "en") -> XBarNode:
             n_bar = XBarNode(category="N'", role="bar", children=[adj, n_bar])
 
         # NP Phrase node
+        is_infinitive = (
+            noun_word.endswith(("er", "ir", "re", "oir")) and
+            noun_word not in ("hiver", "mer", "fer", "soir", "espoir", "livre", "lettre", "arbre", "chambre", "cadre", "ordre", "verre", "pierre", "terre")
+        )
         np_children = []
         if det_node:
             np_children.append(det_node)
+        elif not is_pronoun and not is_infinitive and lang == "fr":
+            det_label = "les" if is_plural else ("la" if gender == "F" else "le")
+            np_children.append(XBarNode(category="Det", role="specifier", label=det_label))
         np_children.append(n_bar)
 
         return XBarNode(category="NP", role="phrase", children=np_children)

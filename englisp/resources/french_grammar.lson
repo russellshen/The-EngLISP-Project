@@ -1,5 +1,5 @@
 (
-  (AuxChain (I AuxChain) (I) ())
+  (AuxChain (I Neg AuxChain) (I Neg) (I AuxChain) (I) ())
   (C' (C VP) (C IP))
   (CP (C'))
   (Conj'_IP (Conj IP))
@@ -14,6 +14,6 @@
   (P' (P NP))
   (PP (P'))
   (V' (V'_base) (V' PP) (V' Adv))
-  (V'_base (V NP NP) (V NP) (V))
+  (V'_base (V NP NP) (V NP) (V Adj) (V PP) (V Adv) (V))
   (VP (V'))
 )

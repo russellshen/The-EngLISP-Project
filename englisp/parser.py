@@ -162,6 +162,11 @@ def correct_word(word: str, lang: str = "en") -> str:
         return word
     if w_lower in COMMON_PREPOSITIONS:
         return word
+    from englisp.loader import ENGLISH_VERB_FORMS, FRENCH_VERB_FORMS
+    if lang == "en" and w_lower in ENGLISH_VERB_FORMS:
+        return word
+    if lang == "fr" and w_lower in FRENCH_VERB_FORMS:
+        return word
     if lang == "fr":
         if w_lower in COMMON_FRENCH_PREPOSITIONS:
             return word
@@ -230,6 +235,12 @@ def tag_tokens(tokens: List[str], lang: str = "en") -> List[Tuple[str, str]]:
     tagged = []
     for idx, token in enumerate(tokens):
         t_lower = token.lower()
+        if t_lower == "not":
+            tagged.append((token, "Neg"))
+            continue
+        if lang == "en" and t_lower in ("cannot", "doesnt", "dont", "isnt", "hasnt", "havent", "wont", "wouldnt", "shouldnt", "couldnt", "can", "could", "should", "would", "might", "may", "must", "will", "shall", "do", "does", "did") and (idx + 1 < len(tokens) or t_lower not in ("do", "does", "did")):
+            tagged.append((token, "I"))
+            continue
         if t_lower in ("exit", "exits"):
             tagged.append((token, "V"))
             continue
@@ -317,8 +328,21 @@ def tag_tokens(tokens: List[str], lang: str = "en") -> List[Tuple[str, str]]:
             stem_y = t_lower[:-3] + "y"
             if (stem_y in lex and lex[stem_y] == "N") or (stem_y in full_lex and full_lex[stem_y] == "N") or stem_y in ("strawberry", "berry", "cherry"):
                 tagged.append((token, "N"))
-        elif lang == "en" and idx > 0 and tagged[idx - 1][1] == "I" and t_lower not in ("been", "be", "have", "had", "being"):
-            # Contextual: word after helper modal is a Verb
+        elif lang == "en" and idx > 0 and tagged[idx - 1][1] in ("I", "Neg") and t_lower not in ("been", "be", "have", "had", "being", "not"):
+            # Contextual: word after helper modal or negation is a Verb
+            tagged.append((token, "V"))
+        elif lang == "en" and idx > 0 and tagged[idx - 1][1] in ("N", "Det") and (
+            tokens[idx - 1].lower() in ("i", "you", "he", "she", "we", "they", "it") or
+            (idx >= 2 and tagged[idx - 2][1] == "Det" and tagged[idx - 1][1] == "N") or
+            t_lower in ("sleep", "sleeps", "run", "runs", "eat", "eats", "see", "sees", "want", "wants", "like", "likes", "love", "loves", "hate", "hates", "need", "needs", "know", "knows", "try", "tries", "call", "calls", "help", "helps", "bark", "barks", "barked")
+        ) and t_lower not in ("can", "could", "should", "would", "might", "may", "must", "will", "shall", "cannot", "doesnt", "dont", "isnt", "hasnt", "havent", "wont", "wouldnt", "shouldnt", "couldnt") and t_lower not in COMMON_PREPOSITIONS and t_lower not in ("and", "or", "but", "so", "if", "that", "this", "my", "your", "his", "her", "their", "our", "the", "a", "an"):
+            # Contextual: token immediately following subject NP / pronoun functions as Verb head
+            tagged.append((token, "V"))
+        elif lang == "en" and idx > 0 and tagged[idx - 1][1] == "V" and tokens[idx - 1].lower() in ("am", "is", "are", "was", "were", "be", "been") and t_lower in ("sad", "calm", "happy", "ready", "fat", "tall", "short", "red", "blue", "green", "busy", "good", "bad", "sick", "old", "rich", "clean", "dirty", "hungry", "thirsty", "quiet", "nice", "afraid"):
+            # Contextual: copula predicate adjective
+            tagged.append((token, "Adj"))
+        elif lang == "en" and idx == 0 and len(tokens) <= 4 and t_lower in ("run", "wait", "stop", "go", "come", "help", "call", "be", "listen", "look", "try", "eat", "jump", "leave", "quit", "peel", "tell", "open", "close", "give", "take", "stand", "sit"):
+            # Contextual: sentence-initial subjectless imperative
             tagged.append((token, "V"))
         elif token in lex:
             tagged.append((token, lex[token]))
@@ -360,15 +384,15 @@ def clone_with_role(node: XBarNode, role: str) -> XBarNode:
 
 def build_xbar_node(lhs: str, children: Tuple[XBarNode, ...]) -> XBarNode:
     if lhs == "AuxChain":
-        if not children:
-            return XBarNode(category="AuxChain", role="bar")
-        elif len(children) == 1:
-            i_head = clone_with_role(children[0], "head")
-            return XBarNode(category="AuxChain", role="bar", children=[i_head])
-        else:
-            i_head = clone_with_role(children[0], "head")
-            aux_chain = children[1]
-            return XBarNode(category="AuxChain", role="bar", children=[i_head] + aux_chain.children)
+        nodes = []
+        for c in children:
+            if c.category == "AuxChain":
+                nodes.extend(c.children)
+            elif c.category == "Neg":
+                nodes.append(clone_with_role(c, "adjunct"))
+            else:
+                nodes.append(clone_with_role(c, "head"))
+        return XBarNode(category="AuxChain", role="bar", children=nodes)
     elif lhs == "I'":
         aux_chain = children[0]
         vp = clone_with_role(children[1], "complement")
@@ -391,6 +415,9 @@ def build_xbar_node(lhs: str, children: Tuple[XBarNode, ...]) -> XBarNode:
                 np = clone_with_role(children[0], "specifier")
                 i_bar = clone_with_role(children[1], "bar")
                 return XBarNode(category="IP", role="phrase", children=[np, i_bar])
+        elif len(children) == 1:
+            child = clone_with_role(children[0], "complement")
+            return XBarNode(category="IP", role="phrase", children=[child])
     elif lhs == "Conj'_IP":
         conj = clone_with_role(children[0], "head")
         ip = clone_with_role(children[1], "complement")
@@ -475,17 +502,24 @@ def build_xbar_node(lhs: str, children: Tuple[XBarNode, ...]) -> XBarNode:
         raise ValueError(f"Unknown LHS in build_xbar_node: {lhs}")
 
 def score_tree(node: XBarNode) -> int:
+    if node is None:
+        return 0
     score = 0
-    if node.category == "N'":
+    if node.category == "IP":
         for child in node.children:
-            if child.category in ("PP", "CP"):
+            if child and child.category == "NP":
+                score += 50
+    elif node.category == "N'":
+        for child in node.children:
+            if child and child.category in ("PP", "CP"):
                 score += 10
     elif node.category == "V'":
         for child in node.children:
-            if child.category in ("PP", "CP"):
+            if child and child.category in ("PP", "CP"):
                 score -= 10
     for child in node.children:
-        score += score_tree(child)
+        if child:
+            score += score_tree(child)
     return score
 
 class EarleyState:
@@ -885,17 +919,30 @@ def generate(node: XBarNode, lang: str = "en") -> str:
     sentence = " ".join(filtered)
     sentence = sentence.replace(" ,", ",")
     
-    # Handle French elision (e.g. "le ordinateur" -> "l'ordinateur", "la école" -> "l'école", "de ordinateur" -> "d'ordinateur")
+    # Handle French contractions, elisions, and enclitics
     if lang == "fr":
-        # Match 'le' or 'la' followed by any vowel, vowel with accent, or 'h'
+        # Contractions
+        sentence = re.sub(r"\bde\s+le\b", "du", sentence)
+        sentence = re.sub(r"\bde\s+les\b", "des", sentence)
+        sentence = re.sub(r"\bà\s+le\b", "au", sentence)
+        sentence = re.sub(r"\bà\s+les\b", "aux", sentence)
+
+        # Elisions before vowels and silent h: le/la -> l', de -> d', je -> j', te -> t', me -> m', se -> s', ce -> c', que -> qu', ne -> n'
         sentence = re.sub(r"\b(le|la)\s+([aeiouyéèàâêîôûhAEIOUYÉÈÀÂÊÎÔÛH])", r"l'\2", sentence)
-        # Match 'de' followed by any vowel or 'h'
         sentence = re.sub(r"\bde\s+([aeiouyéèàâêîôûhAEIOUYÉÈÀÂÊÎÔÛH])", r"d'\1", sentence)
-        # Match 'je' followed by any vowel or 'h'
         sentence = re.sub(r"\bje\s+([aeiouyéèàâêîôûhAEIOUYÉÈÀÂÊÎÔÛH])", r"j'\1", sentence)
-        # Note: if there is spaces around the apostrophe like "l' ordinateur" (resulting from clitic separation),
-        # remove the space so it renders as a single word "l'ordinateur"
-        sentence = re.sub(r"\b(l|d|qu|j|m|t|s|n)'\s+", r"\1'", sentence)
+        sentence = re.sub(r"\bte\s+([aeiouyéèàâêîôûhAEIOUYÉÈÀÂÊÎÔÛH])", r"t'\1", sentence)
+        sentence = re.sub(r"\bme\s+([aeiouyéèàâêîôûhAEIOUYÉÈÀÂÊÎÔÛH])", r"m'\1", sentence)
+        sentence = re.sub(r"\bse\s+([aeiouyéèàâêîôûhAEIOUYÉÈÀÂÊÎÔÛH])", r"s'\1", sentence)
+        sentence = re.sub(r"\bque\s+([aeiouyéèàâêîôûhAEIOUYÉÈÀÂÊÎÔÛH])", r"qu'\1", sentence)
+        sentence = re.sub(r"\bce\s+([aeiouyéèàâêîôûhAEIOUYÉÈÀÂÊÎÔÛH])", r"c'\1", sentence)
+        sentence = re.sub(r"\bne\s+([aeiouyéèàâêîôûhAEIOUYÉÈÀÂÊÎÔÛH])", r"n'\1", sentence)
+
+        # Remove whitespace around apostrophes
+        sentence = re.sub(r"\b(l|d|qu|j|m|t|s|n|c)'\s+", r"\1'", sentence)
+
+        # Enclitic hyphens for imperative verbs with post-verbal pronoun: e.g. "appelle moi" -> "appelle-moi"
+        sentence = re.sub(r"\b([a-zA-Zàâäéèêëîïôöùûüç]+)\s+(moi|toi|lui|nous|vous|leur|le|la|les|en|y)\b(?=\s*[.!?]|$)", r"\1-\2", sentence)
 
     # Simple capitalization and punctuation spacing
     sentence = sentence[0].upper() + sentence[1:] + "."
