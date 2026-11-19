@@ -47,10 +47,11 @@ IRREGULAR_FRENCH_VERBS = {
     "savoir": {"1sg": "sais", "2sg": "sais", "3sg": "sait", "1pl": "savons", "2pl": "savez", "3pl": "savent", "imp": "savait", "fut": "saura", "cond": "saurait", "pp": "su", "inf": "savoir"},
     "dormir": {"1sg": "dors", "2sg": "dors", "3sg": "dort", "1pl": "dormons", "2pl": "dormez", "3pl": "dorment", "imp": "dormait", "fut": "dormira", "cond": "dormirait", "pp": "dormi", "inf": "dormir"},
     "partir": {"1sg": "pars", "2sg": "pars", "3sg": "part", "1pl": "partons", "2pl": "partez", "3pl": "partent", "imp": "partait", "fut": "partira", "cond": "partirait", "pp": "parti", "inf": "partir"},
-    "entendre": {"1sg": "entends", "2sg": "entends", "3sg": "entend", "1pl": "entendons", "2pl": "entendez", "3pl": "entendent", "imp": "entendait", "fut": "entendra", "cond": "entendrait", "pp": "entendu", "inf": "entendre"},
-    "attendre": {"1sg": "attends", "2sg": "attends", "3sg": "attend", "1pl": "attendons", "2pl": "attendez", "3pl": "attendent", "imp": "attendait", "fut": "attendra", "cond": "attendrait", "pp": "attendu", "inf": "attendre"},
+    "entendre": {"1sg": "entends", "2sg": "entends", "3sg": "entend", "1pl": "entendons", "2pl": "entendez", "3pl": "entendent", "imp": "entendait", "fut": "entendra", "cond": "entendrait", "pp": "entendu", "inf": "entendre", "imp_pres": "entends"},
+    "attendre": {"1sg": "attends", "2sg": "attends", "3sg": "attend", "1pl": "attendons", "2pl": "attendez", "3pl": "attendent", "imp": "attendait", "fut": "attendra", "cond": "attendrait", "pp": "attendu", "inf": "attendre", "imp_pres": "attends"},
     "courir": {"1sg": "cours", "2sg": "cours", "3sg": "court", "1pl": "courons", "2pl": "courez", "3pl": "courent", "imp": "courait", "fut": "courra", "cond": "courrait", "pp": "couru", "inf": "courir", "imp_pres": "cours"},
     "aider": {"1sg": "aide", "2sg": "aides", "3sg": "aide", "1pl": "aidons", "2pl": "aidez", "3pl": "aident", "imp": "aidait", "fut": "aidera", "cond": "aiderait", "pp": "aidé", "inf": "aider", "imp_pres": "aide"},
+    "appeler": {"1sg": "appelle", "2sg": "appelles", "3sg": "appelle", "1pl": "appelons", "2pl": "appelez", "3pl": "appellent", "imp": "appelait", "fut": "appellera", "cond": "appellerait", "pp": "appelé", "inf": "appeler", "imp_pres": "appelle"},
 }
 
 def inflect_verb(base: str, form_type: str, lang: str) -> str:
@@ -1078,8 +1079,15 @@ def sexpr_to_xbar(expr: SExpr, lang: str = "en") -> XBarNode:
     if op in ("for-all", "exists"):
         if len(expr) < 3:
             raise ValueError(f"Quantifier expression '{op}' requires type and body arguments.")
-        noun_word = translate_word_from_pivot(expr[1], lang)
-        body_expr = expr[2]
+        arg1, arg2 = expr[1], expr[2]
+        if isinstance(arg1, str) or (isinstance(arg1, list) and (len(arg1) == 0 or not isinstance(arg1[0], list)) and (isinstance(arg2, list) and len(arg2) > 0 and arg2[-1] == "_")):
+            noun_raw = arg1
+            body_expr = arg2
+        else:
+            noun_raw = arg2
+            body_expr = arg1
+        noun_str = noun_raw[0] if isinstance(noun_raw, list) else noun_raw
+        noun_word = translate_word_from_pivot(noun_str, lang)
         
         if op == "for-all":
             det_label = "chaque" if lang == "fr" else "every"
@@ -1093,7 +1101,7 @@ def sexpr_to_xbar(expr: SExpr, lang: str = "en") -> XBarNode:
         subject_np.role = "specifier"
         
         if isinstance(body_expr, list) and len(body_expr) > 1 and body_expr[1] == "_":
-            body_expr_eval = [body_expr[0], expr[1]] + body_expr[2:]
+            body_expr_eval = [body_expr[0], noun_str] + body_expr[2:]
             body_xbar_full = sexpr_to_xbar(body_expr_eval, lang)
             body_vp = None
             for child in body_xbar_full.children:
@@ -1599,7 +1607,8 @@ def sexpr_to_xbar(expr: SExpr, lang: str = "en") -> XBarNode:
         if lang == "fr" and subject_expr != "_":
             FRENCH_PRONOUN_CLITICS = {
                 "you": "te", "him": "le", "her": "la", "it": "le", "them": "les", "us": "nous", "me": "me",
-                "vous": "vous", "te": "te", "le": "le", "la": "la", "les": "les", "nous": "nous", "lui": "lui", "leur": "leur"
+                "vous": "vous", "te": "te", "le": "le", "la": "la", "les": "les", "nous": "nous",
+                "lui": "le", "elle": "la", "eux": "les", "moi": "me", "toi": "te", "leur": "les"
             }
             clitic_idx = -1
             for i, child in enumerate(vp_children[1:], start=1):
