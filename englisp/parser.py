@@ -189,6 +189,20 @@ def correct_word(word: str, lang: str = "en") -> str:
     if word in lex or word in full_lex or word == "_" or (word.startswith("[") and word.endswith("]")) or word.isdigit():
         return word
         
+    # Participle and inflection check bypass (-ing, -ed, -ies)
+    if lang == "en" and w_lower.endswith("ing") and len(w_lower) > 4:
+        stem = w_lower[:-3]
+        if stem in lex or stem in full_lex or (stem + "e") in lex or (stem + "e") in full_lex:
+            return word
+        if len(stem) >= 3 and stem[-1] == stem[-2] and (stem[:-1] in lex or stem[:-1] in full_lex):
+            return word
+    if lang == "en" and w_lower.endswith("ed") and len(w_lower) > 3:
+        stem = w_lower[:-2]
+        if stem in lex or stem in full_lex or (stem + "e") in lex or (stem + "e") in full_lex:
+            return word
+        if len(stem) >= 3 and stem[-1] == stem[-2] and (stem[:-1] in lex or stem[:-1] in full_lex):
+            return word
+
     # Plural check bypass (-ies and general suffixes)
     if w_lower.endswith("ies") and len(w_lower) > 3:
         stem_y = w_lower[:-3] + "y"
@@ -340,6 +354,15 @@ def tag_tokens(tokens: List[str], lang: str = "en") -> List[Tuple[str, str]]:
                     tagged.append((token, "N"))
                     continue
 
+        # Check for English inverted copula predicate: "Is he busy?", "Is it free?"
+        if lang == "en" and idx >= 2 and tokens[idx - 2].lower() in ("is", "are", "am", "was", "were") and tokens[idx - 1].lower() in ("i", "you", "he", "she", "we", "they", "it"):
+            if t_lower in ("busy", "dead", "tall", "free", "hard", "nice", "safe", "true", "done", "good", "bad", "sick", "cold", "hungry", "fat", "late", "lazy", "sure", "thin", "tidy", "ugly"):
+                tagged.append((token, "Adj"))
+                continue
+            elif t_lower in ("love", "hero", "art", "music", "work", "home", "bed"):
+                tagged.append((token, "N"))
+                continue
+
         # Check for English subject pronoun followed by verb
         if lang == "en" and idx > 0 and tagged[idx - 1][1] in ("N", "Det") and (
             tokens[idx - 1].lower() in ("i", "you", "he", "she", "we", "they", "it") or
@@ -349,10 +372,15 @@ def tag_tokens(tokens: List[str], lang: str = "en") -> List[Tuple[str, str]]:
             tagged.append((token, "V"))
             continue
 
-        # Check for English verbal particles / adverbs (only when not heading a prepositional phrase)
+        # Check for English verbal particles / adverbs
         if lang == "en" and idx > 0 and tagged[idx - 1][1] == "V" and t_lower in ("up", "down", "on", "off", "in", "out", "away", "back", "ahead", "around", "over"):
-            is_followed_by_np = (idx + 1 < len(tokens) and tokens[idx + 1].lower() in ("the", "a", "an", "this", "that", "these", "those", "my", "your", "his", "her", "their", "our"))
-            if not is_followed_by_np:
+            if idx + 1 == len(tokens) or tokens[idx + 1].lower() in ("and", "or", "but", "so"):
+                tagged.append((token, "Adv"))
+                continue
+            next_t = tokens[idx + 1].lower()
+            if next_t in ("the", "a", "an", "this", "that", "these", "those", "my", "your", "his", "her", "their", "our") or next_t in PRONOUN_LEXICON or (next_t in lex and lex[next_t] == "N") or (next_t in full_lex and full_lex[next_t] == "N"):
+                pass
+            else:
                 tagged.append((token, "Adv"))
                 continue
 
@@ -819,6 +847,7 @@ def parse(text: str, lang: Optional[str] = None) -> XBarNode:
         unknown_words = []
         
         lex = FRENCH_LEXICON if lang == "fr" else LEXICON
+        full_lex = FRENCH_LEXICON_FULL if lang == "fr" else LEXICON_FULL
         plural_suffixes = MORPHOLOGY_RULES.get(lang, {}).get("plural_suffixes", ())
         
         for t in tokens:
@@ -828,7 +857,7 @@ def parse(text: str, lang: Optional[str] = None) -> XBarNode:
                 spelling_corrections.append({"original": t, "corrected": corr})
             
             w_lower = corr.lower()
-            is_known = (w_lower in lex) or (w_lower in PRONOUN_LEXICON) or (w_lower in COMMON_PREPOSITIONS) or (w_lower in ("get", "got", "gets", "getting", "do", "did", "does", "done", "go", "goes", "went", "gone")) or (lang == "fr" and (w_lower in COMMON_FRENCH_PREPOSITIONS or w_lower in FRENCH_COPULAS or w_lower in FRENCH_HAVE_VERBS)) or (w_lower == "_") or (w_lower.startswith("[") and w_lower.endswith("]")) or w_lower.isdigit()
+            is_known = (w_lower in lex) or (w_lower in full_lex) or (w_lower in PRONOUN_LEXICON) or (w_lower in COMMON_PREPOSITIONS) or (w_lower in ("get", "got", "gets", "getting", "do", "did", "does", "done", "go", "goes", "went", "gone")) or (lang == "fr" and (w_lower in COMMON_FRENCH_PREPOSITIONS or w_lower in FRENCH_COPULAS or w_lower in FRENCH_HAVE_VERBS)) or (w_lower == "_") or (w_lower.startswith("[") and w_lower.endswith("]")) or w_lower.isdigit()
             if not is_known:
                 for suffix in plural_suffixes:
                     if w_lower.endswith(suffix):
@@ -960,6 +989,10 @@ def generate(node: XBarNode, lang: str = "en") -> str:
         sentence = re.sub(r"\bà\s+le\b", "au", sentence)
         sentence = re.sub(r"\bà\s+les\b", "aux", sentence)
 
+
+        # Inversion hyphens for French questions: e.g. "est il" -> "est-il", "est ce" -> "est-ce"
+        sentence = re.sub(r"\b(est|sont|était|étaient|sera|seront|a|ont)\s+(il|elle|on|ils|elles|ce)\b", r"\1-\2", sentence, flags=re.IGNORECASE)
+
         # Elisions before vowels and silent h: le/la -> l', de -> d', je -> j', te -> t', me -> m', se -> s', ce -> c', que -> qu', ne -> n'
         sentence = re.sub(r"\b(le|la)\s+([aeiouyéèàâêîôûhAEIOUYÉÈÀÂÊÎÔÛH])", r"l'\2", sentence)
         sentence = re.sub(r"\bde\s+([aeiouyéèàâêîôûhAEIOUYÉÈÀÂÊÎÔÛH])", r"d'\1", sentence)
@@ -977,6 +1010,11 @@ def generate(node: XBarNode, lang: str = "en") -> str:
         # Enclitic hyphens for imperative verbs with post-verbal pronoun: e.g. "appelle moi" -> "appelle-moi"
         sentence = re.sub(r"\b([a-zA-Zàâäéèêëîïôöùûüç]+)\s+(moi|toi|lui|nous|vous|leur|le|la|les|en|y)\b(?=\s*[.!?]|$)", r"\1-\2", sentence)
 
+
     # Simple capitalization and punctuation spacing
-    sentence = sentence[0].upper() + sentence[1:] + "."
+    sentence = sentence[0].upper() + sentence[1:]
+    if re.match(r"^(Est|Sont|Était|Étaient|Sera|Seront|A|Ont)-", sentence):
+        sentence = sentence.rstrip(".") + " ?"
+    else:
+        sentence = sentence + "."
     return sentence

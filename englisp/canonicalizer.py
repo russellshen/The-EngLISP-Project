@@ -56,6 +56,17 @@ IRREGULAR_FRENCH_VERBS = {
     "rester": {"1sg": "reste", "2sg": "restes", "3sg": "reste", "1pl": "restons", "2pl": "restez", "3pl": "restent", "imp": "restait", "fut": "restera", "cond": "resterait", "pp": "resté", "inf": "rester", "imp_pres": "reste"},
     "payer": {"1sg": "paie", "2sg": "paies", "3sg": "paie", "1pl": "payons", "2pl": "payez", "3pl": "paient", "imp": "payait", "fut": "paierai", "cond": "paierait", "pp": "payé", "inf": "payer", "imp_pres": "paie"},
     "attraper": {"1sg": "attrape", "2sg": "attrapes", "3sg": "attrape", "1pl": "attrapons", "2pl": "attrapez", "3pl": "attrapent", "imp": "attrapait", "fut": "attrapera", "cond": "attraperait", "pp": "attrapé", "inf": "attraper", "imp_pres": "attrape"},
+    "écrire": {"1sg": "écris", "2sg": "écris", "3sg": "écrit", "1pl": "écrivons", "2pl": "écrivez", "3pl": "écrivent", "imp": "écrivait", "fut": "écrira", "cond": "écrirait", "pp": "écrit", "inf": "écrire", "imp_pres": "écris"},
+    "perdre": {"1sg": "perds", "2sg": "perds", "3sg": "perd", "1pl": "perdons", "2pl": "perdez", "3pl": "perdent", "imp": "perdait", "fut": "perdra", "cond": "perdrait", "pp": "perdu", "inf": "perdre", "imp_pres": "perds"},
+    "essayer": {"1sg": "essaie", "2sg": "essaies", "3sg": "essaie", "1pl": "essayons", "2pl": "essayez", "3pl": "essaient", "imp": "essayait", "fut": "essaiera", "cond": "essaierait", "pp": "essayé", "inf": "essayer", "imp_pres": "essaie"},
+    "accepter": {"1sg": "accepte", "2sg": "acceptes", "3sg": "accepte", "1pl": "acceptons", "2pl": "acceptez", "3pl": "acceptent", "imp": "acceptait", "fut": "acceptera", "cond": "accepterait", "pp": "accepté", "inf": "accepter", "imp_pres": "accepte"},
+    "tirer": {"1sg": "tire", "2sg": "tires", "3sg": "tire", "1pl": "tirons", "2pl": "tirez", "3pl": "tirent", "imp": "tirait", "fut": "tirera", "cond": "tirerait", "pp": "tiré", "inf": "tirer", "imp_pres": "tire"},
+    "ignorer": {"1sg": "ignore", "2sg": "ignores", "3sg": "ignore", "1pl": "ignorons", "2pl": "ignorez", "3pl": "ignorent", "imp": "ignorait", "fut": "ignorera", "cond": "ignorerait", "pp": "ignoré", "inf": "ignorer", "imp_pres": "ignore"},
+    "cuire": {"1sg": "cuis", "2sg": "cuis", "3sg": "cuit", "1pl": "cuisons", "2pl": "cuisez", "3pl": "cuisent", "imp": "cuisait", "fut": "cuira", "cond": "cuirait", "pp": "cuit", "inf": "cuire", "imp_pres": "cuis"},
+    "cacher": {"1sg": "cache", "2sg": "caches", "3sg": "cache", "1pl": "cachons", "2pl": "cachez", "3pl": "cachent", "imp": "cachait", "fut": "cachera", "cond": "cacherait", "pp": "caché", "inf": "cacher", "imp_pres": "cache"},
+    "plaisanter": {"1sg": "plaisante", "2sg": "plaisantes", "3sg": "plaisante", "1pl": "plaisantons", "2pl": "plaisantez", "3pl": "plaisantent", "imp": "plaisantait", "fut": "plaisantera", "cond": "plaisanterait", "pp": "plaisanté", "inf": "plaisanter", "imp_pres": "plaisante"},
+    "bouger": {"1sg": "bouge", "2sg": "bouges", "3sg": "bouge", "1pl": "bougeons", "2pl": "bougez", "3pl": "bougent", "imp": "bougeait", "fut": "bougera", "cond": "bougerait", "pp": "bougé", "inf": "bouger", "imp_pres": "bouge"},
+    "vérifier": {"1sg": "vérifie", "2sg": "vérifies", "3sg": "vérifie", "1pl": "vérifions", "2pl": "vérifiez", "3pl": "vérifient", "imp": "vérifiait", "fut": "vérifiera", "cond": "vérifierait", "pp": "vérifié", "inf": "vérifier", "imp_pres": "vérifie"},
 }
 
 def inflect_verb(base: str, form_type: str, lang: str) -> str:
@@ -222,6 +233,19 @@ def get_base_verb(verb_word: str, lang: str) -> str:
     for base, forms in forms_dict.items():
         if verb_word in forms or verb_word == base:
             return base
+    if lang == "en":
+        if verb_word.endswith("ied"):
+            stem_y = verb_word[:-3] + "y"
+            if stem_y in forms_dict or stem_y in VERBS_EN_TO_FR:
+                return stem_y
+        if verb_word.endswith("ing"):
+            stem = verb_word[:-3]
+            from englisp.loader import LEXICON_FULL
+            if (stem + "e") in forms_dict or (stem + "e") in VERBS_EN_TO_FR or ((stem + "e") in LEXICON_FULL and LEXICON_FULL[stem + "e"] == "V"):
+                return stem + "e"
+            if len(stem) >= 3 and stem[-1] == stem[-2]:
+                if stem[:-1] in forms_dict or stem[:-1] in VERBS_EN_TO_FR or (stem[:-1] in LEXICON_FULL and LEXICON_FULL[stem[:-1]] == "V"):
+                    return stem[:-1]
     # Fallback to rules in MORPHOLOGY_RULES
     rules = MORPHOLOGY_RULES.get(lang, {}).get("base_rules", [])
     for suffix, replacement in rules:
@@ -432,6 +456,17 @@ VERBS_EN_TO_FR = {
     "refuse": "refuser", "refuses": "refuse", "refused": "refusé",
     "do": "faire", "does": "fait", "did": "fait",
     "get": "obtenir", "gets": "obtient", "got": "obtenu",
+    "bake": "cuire", "bakes": "cuit", "baked": "cuit",
+    "hide": "se cacher", "hides": "se cache", "hid": "caché", "hidden": "caché",
+    "joke": "plaisanter", "jokes": "plaisante", "joked": "plaisanté",
+    "lose": "perdre", "loses": "perd", "lost": "perdu",
+    "move": "bouger", "moves": "bouge", "moved": "bougé",
+    "try": "essayer", "tries": "essaie", "tried": "essayé",
+    "write": "écrire", "writes": "écrit", "wrote": "écrit", "written": "écrit",
+    "check": "vérifier", "checks": "vérifie", "checked": "vérifié",
+    "accept": "accepter", "accepts": "accepte", "accepted": "accepté",
+    "shoot": "tirer", "shoots": "tire", "shot": "tiré",
+    "ignore": "ignorer", "ignores": "ignore", "ignored": "ignoré",
 }
 
 COMMON_WORDS_EN_TO_FR = {
@@ -465,6 +500,9 @@ COMMON_WORDS_EN_TO_FR = {
     "late": "en retard", "lazy": "paresseux", "safe": "en sécurité",
     "sick": "malade", "sure": "certain", "tall": "grand", "thin": "mince",
     "tidy": "ordonné", "ugly": "laid", "cold": "froid",
+    "bed": "lit", "dead": "mort", "done": "fait", "hard": "dur", "nice": "gentil",
+    "true": "vrai", "love": "amour", "hero": "héros", "hungry": "faim", "greedy": "gourmand",
+    "skinny": "maigre", "strict": "strict",
     "once": "une fois que"
 }
 
@@ -1570,11 +1608,29 @@ def sexpr_to_xbar(expr: SExpr, lang: str = "en") -> XBarNode:
                     verb_form = inflect_french_verb(verb_form, "pp")
                 else:
                     if subject_expr == "_":
-                        verb_form = IRREGULAR_FRENCH_VERBS.get(verb_form, {}).get("imp_pres") or inflect_french_verb(verb_form, "imp_pres")
+                        if args and len(args) >= 2 and isinstance(args[0], (str, list)):
+                            inverted_subj = args[0][0] if (isinstance(args[0], list) and args[0]) else args[0]
+                            if isinstance(inverted_subj, str) and inverted_subj.lower() in ("he", "she", "it", "il", "elle", "ce", "they", "ils", "elles", "you", "tu", "vous", "we", "nous"):
+                                if inverted_subj.lower() in ("they", "ils", "elles"):
+                                    verb_form = inflect_french_verb(verb_form, "3pl")
+                                elif inverted_subj.lower() in ("you", "tu"):
+                                    verb_form = inflect_french_verb(verb_form, "2sg")
+                                else:
+                                    verb_form = inflect_french_verb(verb_form, "3sg")
+                            else:
+                                verb_form = IRREGULAR_FRENCH_VERBS.get(verb_form, {}).get("imp_pres") or inflect_french_verb(verb_form, "imp_pres")
+                        else:
+                            verb_form = IRREGULAR_FRENCH_VERBS.get(verb_form, {}).get("imp_pres") or inflect_french_verb(verb_form, "imp_pres")
                     elif is_1sg_subj:
-                        verb_form = inflect_french_verb(verb_form, "1sg")
+                        if op_low in ("was", "were"):
+                            verb_form = "étais"
+                        else:
+                            verb_form = inflect_french_verb(verb_form, "1sg")
                     elif is_2sg_subj:
-                        verb_form = inflect_french_verb(verb_form, "2sg")
+                        if op_low in ("was", "were"):
+                            verb_form = "étais"
+                        else:
+                            verb_form = inflect_french_verb(verb_form, "2sg")
                     elif is_1pl_subj:
                         verb_form = inflect_french_verb(verb_form, "1pl")
                     elif is_2pl_subj:
@@ -1591,23 +1647,34 @@ def sexpr_to_xbar(expr: SExpr, lang: str = "en") -> XBarNode:
                 arg_node = sexpr_to_xbar(arg_expr, lang)
                 vp_children.append(arg_node)
             if lang == "fr":
-                IMPERATIVE_PRONOUNS = {
-                    "you": "toi", "him": "le", "her": "la", "it": "le", "them": "les", "us": "nous", "me": "moi",
-                    "vous": "vous", "te": "toi", "le": "le", "la": "la", "les": "les", "nous": "nous",
-                    "lui": "le", "elle": "la", "eux": "les", "moi": "moi", "toi": "toi", "leur": "les"
-                }
-                for child in vp_children[1:]:
-                    if child.category == "NP":
-                        has_det = any(c.category == "Det" for c in child.children)
-                        if has_det:
-                            continue
-                        for desc in child.children:
-                            if desc.category == "N'" and desc.children:
-                                for c in desc.children:
-                                    if c.category in ("N", "Pron") and c.label and c.label.lower() in IMPERATIVE_PRONOUNS:
-                                        c.label = IMPERATIVE_PRONOUNS[c.label.lower()]
-                            elif desc.category in ("N", "Pron") and desc.label and desc.label.lower() in IMPERATIVE_PRONOUNS:
-                                desc.label = IMPERATIVE_PRONOUNS[desc.label.lower()]
+                if op.lower() in ("is", "are", "am", "was", "were", "être", "est", "sommes", "êtes", "sont"):
+                    for child in vp_children[1:]:
+                        if child.category == "NP":
+                            for desc in child.children:
+                                if desc.category == "N'" and desc.children:
+                                    for c in desc.children:
+                                        if c.category in ("N", "Pron") and c.label and c.label.lower() == "it":
+                                            c.label = "ce"
+                                elif desc.category in ("N", "Pron") and desc.label and desc.label.lower() == "it":
+                                    desc.label = "ce"
+                else:
+                    IMPERATIVE_PRONOUNS = {
+                        "you": "toi", "him": "le", "her": "la", "it": "le", "them": "les", "us": "nous", "me": "moi",
+                        "vous": "vous", "te": "toi", "le": "le", "la": "la", "les": "les", "nous": "nous",
+                        "lui": "le", "elle": "la", "eux": "les", "moi": "moi", "toi": "toi", "leur": "les"
+                    }
+                    for child in vp_children[1:]:
+                        if child.category == "NP":
+                            has_det = any(c.category == "Det" for c in child.children)
+                            if has_det:
+                                continue
+                            for desc in child.children:
+                                if desc.category == "N'" and desc.children:
+                                    for c in desc.children:
+                                        if c.category in ("N", "Pron") and c.label and c.label.lower() in IMPERATIVE_PRONOUNS:
+                                            c.label = IMPERATIVE_PRONOUNS[c.label.lower()]
+                                elif desc.category in ("N", "Pron") and desc.label and desc.label.lower() in IMPERATIVE_PRONOUNS:
+                                    desc.label = IMPERATIVE_PRONOUNS[desc.label.lower()]
             first_np_idx = -1
             for i, child in enumerate(vp_children[1:], start=1):
                 if child.category == "NP":

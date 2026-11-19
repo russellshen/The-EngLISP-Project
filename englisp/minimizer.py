@@ -61,11 +61,15 @@ KNOWN_VERBS = {
     "run", "wait", "stop", "go", "come", "help", "call", "be", "see", "sleep", "eat",
     "love", "like", "hate", "want", "need", "know", "try", "win", "lose", "feel",
     "stand", "sit", "quit", "leave", "fall", "arrive", "look", "listen", "read", "write",
-    "tell", "say", "speak", "talk", "hear", "buy", "make", "take", "give", "find"
+    "tell", "say", "speak", "talk", "hear", "buy", "make", "take", "give", "find",
+    "bake", "hide", "joke", "move", "check", "accept", "shoot", "ignore", "work",
+    "pay", "forget", "use", "fail", "phone", "refuse", "drive", "grab", "hurry", "stay"
 }
 
-def get_pos(word: str) -> str:
+def get_pos(word: Any) -> str:
     """Helper to check the part of speech of a word."""
+    if not isinstance(word, str):
+        return ""
     w_lower = word.lower()
     if w_lower in KNOWN_VERBS:
         return "V"
@@ -279,9 +283,10 @@ def _minimize_sexpr_recursive(expr: SExpr) -> SExpr:
         # Second argument is the object if it is a core NP (not PP or Adv)
         if len(min_children) > 2:
             arg = min_children[2]
-            is_pp = isinstance(arg, list) and len(arg) > 0 and get_pos(arg[0]) == "P"
+            is_tense_vector = isinstance(arg, list) and len(arg) == 3 and isinstance(arg[0], int)
+            is_pp = isinstance(arg, list) and len(arg) > 0 and isinstance(arg[0], str) and get_pos(arg[0]) == "P"
             is_adv = isinstance(arg, str) and get_pos(arg) == "Adv"
-            if not is_pp and not is_adv:
+            if not is_pp and not is_adv and not is_tense_vector:
                 core_args.append(arg)
                 start_adjunct_idx = 3
             else:
