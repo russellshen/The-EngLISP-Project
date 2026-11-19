@@ -67,6 +67,16 @@ IRREGULAR_FRENCH_VERBS = {
     "plaisanter": {"1sg": "plaisante", "2sg": "plaisantes", "3sg": "plaisante", "1pl": "plaisantons", "2pl": "plaisantez", "3pl": "plaisantent", "imp": "plaisantait", "fut": "plaisantera", "cond": "plaisanterait", "pp": "plaisanté", "inf": "plaisanter", "imp_pres": "plaisante"},
     "bouger": {"1sg": "bouge", "2sg": "bouges", "3sg": "bouge", "1pl": "bougeons", "2pl": "bougez", "3pl": "bougent", "imp": "bougeait", "fut": "bougera", "cond": "bougerait", "pp": "bougé", "inf": "bouger", "imp_pres": "bouge"},
     "vérifier": {"1sg": "vérifie", "2sg": "vérifies", "3sg": "vérifie", "1pl": "vérifions", "2pl": "vérifiez", "3pl": "vérifient", "imp": "vérifiait", "fut": "vérifiera", "cond": "vérifierait", "pp": "vérifié", "inf": "vérifier", "imp_pres": "vérifie"},
+    "gagner": {"1sg": "gagne", "2sg": "gagnes", "3sg": "gagne", "1pl": "gagnons", "2pl": "gagnez", "3pl": "gagnent", "imp": "gagnait", "fut": "gagnera", "cond": "gagnerait", "pp": "gagné", "inf": "gagner", "imp_pres": "gagne"},
+    "mourir": {"1sg": "meurs", "2sg": "meurs", "3sg": "meurt", "1pl": "mourons", "2pl": "mourez", "3pl": "meurent", "imp": "mourait", "fut": "mourra", "cond": "mourrait", "pp": "mort", "inf": "mourir", "imp_pres": "meurs"},
+    "voler": {"1sg": "vole", "2sg": "voles", "3sg": "vole", "1pl": "volons", "2pl": "volez", "3pl": "volent", "imp": "volait", "fut": "volera", "cond": "volerait", "pp": "volé", "inf": "voler", "imp_pres": "vole"},
+    "mentir": {"1sg": "mens", "2sg": "mens", "3sg": "ment", "1pl": "mentons", "2pl": "mentez", "3pl": "mentent", "imp": "mentait", "fut": "mentira", "cond": "mentirait", "pp": "menti", "inf": "mentir", "imp_pres": "mens"},
+    "pleurer": {"1sg": "pleure", "2sg": "pleures", "3sg": "pleure", "1pl": "pleurons", "2pl": "pleurez", "3pl": "pleurent", "imp": "pleurait", "fut": "pleurera", "cond": "pleurerait", "pp": "pleuré", "inf": "pleurer", "imp_pres": "pleure"},
+    "demander": {"1sg": "demande", "2sg": "demandes", "3sg": "demande", "1pl": "demandons", "2pl": "demandez", "3pl": "demandent", "imp": "demandait", "fut": "demandera", "cond": "demanderait", "pp": "demandé", "inf": "demander", "imp_pres": "demande"},
+    "sentir": {"1sg": "sens", "2sg": "sens", "3sg": "sent", "1pl": "sentons", "2pl": "sentez", "3pl": "sentent", "imp": "sentait", "fut": "sentira", "cond": "sentirait", "pp": "senti", "inf": "sentir", "imp_pres": "sens"},
+    "tenir": {"1sg": "tiens", "2sg": "tiens", "3sg": "tient", "1pl": "tenons", "2pl": "tenez", "3pl": "tiennent", "imp": "tenait", "fut": "tiendra", "cond": "tiendrait", "pp": "tenu", "inf": "tenir", "imp_pres": "tiens"},
+    "avertir": {"1sg": "avertis", "2sg": "avertis", "3sg": "avertit", "1pl": "avertissons", "2pl": "avertissez", "3pl": "avertissent", "imp": "avertissait", "fut": "avertira", "cond": "avertirait", "pp": "averti", "inf": "avertir", "imp_pres": "avertis"},
+    "épouser": {"1sg": "épouse", "2sg": "épouses", "3sg": "épouse", "1pl": "épousons", "2pl": "épousez", "3pl": "épousent", "imp": "épousait", "fut": "épousera", "cond": "épouserait", "pp": "épousé", "inf": "épouser", "imp_pres": "épouse"},
 }
 
 def inflect_verb(base: str, form_type: str, lang: str) -> str:
@@ -467,6 +477,17 @@ VERBS_EN_TO_FR = {
     "accept": "accepter", "accepts": "accepte", "accepted": "accepté",
     "shoot": "tirer", "shoots": "tire", "shot": "tiré",
     "ignore": "ignorer", "ignores": "ignore", "ignored": "ignoré",
+    "win": "gagner", "wins": "gagne", "won": "gagné",
+    "die": "mourir", "dies": "meurt", "died": "mort",
+    "fly": "voler", "flies": "vole", "flew": "volé",
+    "lie": "mentir", "lies": "ment", "lied": "menti",
+    "cry": "pleurer", "cries": "pleure", "cried": "pleuré",
+    "ask": "demander", "asks": "demande", "asked": "demandé",
+    "feel": "sentir", "feels": "sent", "felt": "senti",
+    "hold": "tenir", "holds": "tient", "held": "tenu",
+    "warn": "avertir", "warns": "avertit", "warned": "averti",
+    "marry": "épouser", "marries": "épouse", "married": "épousé",
+    "catch": "attraper", "catches": "attrape", "caught": "attrapé",
 }
 
 COMMON_WORDS_EN_TO_FR = {
@@ -497,12 +518,16 @@ COMMON_WORDS_EN_TO_FR = {
     "calm": "calme", "sad": "triste", "ready": "prêt", "happy": "heureux",
     "wet": "mouillé", "fat": "gras", "bald": "chauve", "busy": "occupé",
     "deaf": "sourd", "fast": "rapide", "free": "libre", "glad": "content",
-    "late": "en retard", "lazy": "paresseux", "safe": "en sécurité",
+    "late": "tard", "lazy": "paresseux", "safe": "en sécurité",
     "sick": "malade", "sure": "certain", "tall": "grand", "thin": "mince",
     "tidy": "ordonné", "ugly": "laid", "cold": "froid",
     "bed": "lit", "dead": "mort", "done": "fait", "hard": "dur", "nice": "gentil",
     "true": "vrai", "love": "amour", "hero": "héros", "hungry": "faim", "greedy": "gourmand",
     "skinny": "maigre", "strict": "strict",
+    "bird": "oiseau", "birds": "oiseaux",
+    "this": "ceci", "that": "cela", "too": "trop", "what": "quoi",
+    "how": "comme", "awful": "affreux", "some": "en",
+    "terrific": "génial", "fantastic": "fantastique", "fun": "amusant",
     "once": "une fois que"
 }
 
@@ -543,6 +568,8 @@ def translate_word_from_pivot(word: str, target_lang: str, gender: Optional[str]
             elif word_lower in ("a", "an"):
                 return "une" if gender == "F" else "un"
             elif word_lower in ("this", "that"):
+                if gender is None and pos != "Det_mod":
+                    return "ceci" if word_lower == "this" else "cela"
                 return "cette" if gender == "F" else "ce"
             elif word_lower == "my":
                 return "ma" if gender == "F" else "mon"
@@ -1023,6 +1050,9 @@ def xbar_to_sexpr(node: XBarNode, lang: str = "en") -> SExpr:
                 n_bar = child
 
         if not n_bar:
+            for child in node.children:
+                if child.category == "Det":
+                    return get_label(child)
             raise ValueError("Invalid NP node: missing N' bar node.")
 
         # Extract head noun, adjectives (adjuncts), and PP complements
@@ -1035,9 +1065,11 @@ def xbar_to_sexpr(node: XBarNode, lang: str = "en") -> SExpr:
             for child in n_node.children:
                 if child.category == "N" and child.role == "head":
                     noun_word = get_label(child)
-                elif child.category == "N'" and child.role == "bar":
+                elif child.category in ("N'", "N'_base") and child.role == "bar":
                     traverse_n_bar(child)
-                elif child.category == "Adj" and child.role == "adjunct":
+                elif child.category == "Adj":
+                    adjectives.append(get_label(child))
+                elif child.category == "Adv":
                     adjectives.append(get_label(child))
                 elif child.role in ("complement", "adjunct"):
                     post_modifiers.append(xbar_to_sexpr(child, lang))
@@ -1045,7 +1077,10 @@ def xbar_to_sexpr(node: XBarNode, lang: str = "en") -> SExpr:
         traverse_n_bar(n_bar)
 
         if not noun_word:
-            noun_word = "thing"
+            if adjectives:
+                noun_word = adjectives.pop(0) if len(adjectives) == 1 else adjectives.pop(-1)
+            else:
+                noun_word = "thing"
 
         # Build NP S-expression: (noun det adj1 adj2 ... pp_comps...)
         np_sexpr = [noun_word]
@@ -1070,9 +1105,9 @@ def xbar_to_sexpr(node: XBarNode, lang: str = "en") -> SExpr:
         p_head = None
         np_comp = None
         for child in p_bar.children:
-            if child.category == "P" and child.role == "head":
+            if child.category == "P":
                 p_head = child
-            elif child.category == "NP" and child.role == "complement":
+            elif child.category == "NP":
                 np_comp = child
 
         prep_word = get_label(p_head) if p_head else "at"
@@ -1100,10 +1135,22 @@ def sexpr_to_xbar(expr: SExpr, lang: str = "en") -> XBarNode:
         tags = tag_tokens([expr]) # Eng pivot tagging
         cat = tags[0][1] if tags else "N"
         role = "terminal"
-        # If it represents a bare noun, we should promote it to NP to make it grammatically valid!
+        # If it represents a bare noun, determiner, or adjective fragment, promote it to NP to make it grammatically valid!
         if cat == "N":
             noun_node = XBarNode(category="N", role="head", label=translated)
             n_bar = XBarNode(category="N'", role="bar", children=[noun_node])
+            return XBarNode(category="NP", role="phrase", children=[n_bar])
+        if cat == "Det" or expr.lower() in ("this", "that", "ceci", "cela", "ça"):
+            if lang == "fr":
+                det_label = "ceci" if expr.lower() == "this" else ("cela" if expr.lower() == "that" else translated)
+            else:
+                det_label = expr
+            det_node = XBarNode(category="Det", role="head", label=det_label)
+            return XBarNode(category="NP", role="phrase", children=[det_node])
+        if cat in ("Adj", "Adv"):
+            adj_node = XBarNode(category=cat, role="head", label=translated)
+            n_base = XBarNode(category="N'_base", role="bar", children=[adj_node])
+            n_bar = XBarNode(category="N'", role="bar", children=[n_base])
             return XBarNode(category="NP", role="phrase", children=[n_bar])
         return XBarNode(category=cat, role=role, label=translated)
 
@@ -1224,7 +1271,9 @@ def sexpr_to_xbar(expr: SExpr, lang: str = "en") -> XBarNode:
     # Tag the English operator to determine its role (V = Sentence/IP, N = NP, P = PP, I = Modal Sentence)
     tags = tag_tokens([op])
     op_cat = tags[0][1] if tags else "N"
-    if op.lower() in ("can", "could", "should", "would", "might", "may", "must", "will", "shall", "cannot", "doesnt", "dont", "isnt", "hasnt", "havent", "wont", "wouldnt", "shouldnt", "couldnt"):
+    if op.lower() in ("this", "that", "ceci", "cela", "ça") and len(expr) == 1:
+        op_cat = "Det"
+    elif op.lower() in ("can", "could", "should", "would", "might", "may", "must", "will", "shall", "cannot", "doesnt", "dont", "isnt", "hasnt", "havent", "wont", "wouldnt", "shouldnt", "couldnt"):
         op_cat = "I"
     elif op_cat in ("Conj", "C"):
         pass
@@ -1817,9 +1866,17 @@ def sexpr_to_xbar(expr: SExpr, lang: str = "en") -> XBarNode:
 
         return XBarNode(category="IP", role="phrase", children=[subject_np, i_bar])
 
-    elif op_cat == "N":
-        # Noun operator => translates to NP
+    elif op_cat in ("N", "Det"):
+        # Noun/Pronoun operator => translates to NP
         # S-expression format: (noun det adj1 adj2 ... pp_comp ...)
+        if op.lower() in ("this", "that", "ceci", "cela", "ça") and len(expr) == 1:
+            if lang == "fr":
+                det_label = "ceci" if op.lower() == "this" else ("cela" if op.lower() == "that" else op)
+            else:
+                det_label = op
+            det_node = XBarNode(category="Det", role="head", label=det_label)
+            return XBarNode(category="NP", role="phrase", children=[det_node])
+
         is_plural = is_plural_nominal(op)
         number = "plural" if is_plural else "singular"
         noun_word = translate_word_from_pivot(op, lang, number=number)
@@ -1862,6 +1919,10 @@ def sexpr_to_xbar(expr: SExpr, lang: str = "en") -> XBarNode:
                             post_adjectives.append(adj_node)
                         else:
                             pre_adjectives.append(adj_node)
+                    elif arg_cat == "Adv":
+                        adv_label = translate_word_from_pivot(arg, lang, gender, number=number)
+                        adv_node = XBarNode(category="Adv", role="adjunct", label=adv_label)
+                        pre_adjectives.append(adv_node)
                     else:
                         adj_label = translate_word_from_pivot(arg, lang, gender, number=number)
                         adj_node = XBarNode(category="Adj", role="adjunct", label=adj_label)
@@ -1937,6 +1998,17 @@ def sexpr_to_xbar(expr: SExpr, lang: str = "en") -> XBarNode:
 
         p_bar = XBarNode(category="P'", role="bar", children=[p_head, np_comp])
         return XBarNode(category="PP", role="phrase", children=[p_bar])
+
+    elif op_cat in ("Adj", "Adv"):
+        head_word = translate_word_from_pivot(op, lang)
+        head_node = XBarNode(category=op_cat, role="head", label=head_word)
+        adv_children = []
+        post_children = []
+        for arg in expr[1:]:
+            arg_node = sexpr_to_xbar(arg, lang)
+            adv_children.append(arg_node)
+        bar_node = XBarNode(category=f"{op_cat}'", role="bar", children=adv_children + [head_node] + post_children)
+        return XBarNode(category=f"{op_cat}P", role="phrase", children=[bar_node])
 
     else:
         # Generic fallback

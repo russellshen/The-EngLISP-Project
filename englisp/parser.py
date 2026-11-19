@@ -63,6 +63,9 @@ PRONOUN_LEXICON = {
     "herself": {"gender": "feminine", "number": "singular", "type": "reflexive"},
     "itself": {"gender": "neuter", "number": "singular", "type": "reflexive"},
     "themselves": {"gender": "neutral", "number": "plural", "type": "reflexive"},
+    "what": {"gender": "neutral", "number": "singular", "type": "interrogative"},
+    "who": {"gender": "neutral", "number": "singular", "type": "interrogative"},
+    "which": {"gender": "neutral", "number": "singular", "type": "interrogative"},
     
     # French Subject Pronouns
     "je": {"gender": "neutral", "number": "singular", "type": "subject"},
@@ -94,6 +97,10 @@ PRONOUN_LEXICON = {
     "votre": {"gender": "neutral", "number": "singular", "type": "possessive"},
     "vos": {"gender": "neutral", "number": "plural", "type": "possessive"},
     "leurs": {"gender": "neutral", "number": "plural", "type": "possessive"},
+    "quoi": {"gender": "neutral", "number": "singular", "type": "interrogative"},
+    "ceci": {"gender": "neutral", "number": "singular", "type": "demonstrative"},
+    "cela": {"gender": "neutral", "number": "singular", "type": "demonstrative"},
+    "ça": {"gender": "neutral", "number": "singular", "type": "demonstrative"},
 }
 
 COMMON_PREPOSITIONS = {
@@ -263,6 +270,10 @@ def tag_tokens(tokens: List[str], lang: str = "en") -> List[Tuple[str, str]]:
         if t_lower == "not":
             tagged.append((token, "Neg"))
             continue
+        # Inverted auxiliary / modal question in C (e.g. "May I go?", "Can we go?", "Did I win?")
+        if lang == "en" and idx == 0 and len(tokens) >= 3 and t_lower in ("may", "can", "could", "should", "would", "must", "did", "do", "does", "will", "shall") and tokens[1].lower() in ("i", "you", "he", "she", "we", "they", "it", "the", "a", "this", "that", "tom", "mary"):
+            tagged.append((token, "C"))
+            continue
         if lang == "en" and t_lower in ("cannot", "doesnt", "dont", "isnt", "hasnt", "havent", "wont", "wouldnt", "shouldnt", "couldnt", "can", "could", "should", "would", "might", "may", "must", "will", "shall"):
             tagged.append((token, "I"))
             continue
@@ -279,10 +290,21 @@ def tag_tokens(tokens: List[str], lang: str = "en") -> List[Tuple[str, str]]:
         if t_lower in ("exit", "exits"):
             tagged.append((token, "V"))
             continue
+        if lang == "en" and t_lower in ("how", "hows"):
+            tagged.append((token, "Adv"))
+            continue
         if t_lower in PRONOUN_LEXICON:
             p_type = PRONOUN_LEXICON[t_lower].get("type")
             if p_type == "possessive":
                 tagged.append((token, "Det"))
+                continue
+            elif t_lower == "what":
+                if idx + 1 < len(tokens):
+                    next_tok = tokens[idx + 1].lower()
+                    if next_tok in ("fun", "a", "an", "news", "nonsense", "luck", "time", "day", "way") or (next_tok in full_lex and full_lex[next_tok] == "N"):
+                        tagged.append((token, "Det"))
+                        continue
+                tagged.append((token, "N"))
                 continue
             elif t_lower == "her":
                 if idx + 1 < len(tokens):
@@ -353,6 +375,9 @@ def tag_tokens(tokens: List[str], lang: str = "en") -> List[Tuple[str, str]]:
                 if idx > 0 and tokens[idx - 1].lower() == "to":
                     tagged.append((token, "N"))
                     continue
+            if idx == 0 and t_lower == "what" and len(tokens) > 1 and tokens[1].lower() in ("fun", "a", "an", "news", "nonsense", "luck"):
+                tagged.append((token, "Det"))
+                continue
 
         # Check for English inverted copula predicate: "Is he busy?", "Is it free?"
         if lang == "en" and idx >= 2 and tokens[idx - 2].lower() in ("is", "are", "am", "was", "were") and tokens[idx - 1].lower() in ("i", "you", "he", "she", "we", "they", "it"):
@@ -363,11 +388,12 @@ def tag_tokens(tokens: List[str], lang: str = "en") -> List[Tuple[str, str]]:
                 tagged.append((token, "N"))
                 continue
 
-        # Check for English subject pronoun followed by verb
+        # Check for English subject pronoun or noun followed by verb
         if lang == "en" and idx > 0 and tagged[idx - 1][1] in ("N", "Det") and (
             tokens[idx - 1].lower() in ("i", "you", "he", "she", "we", "they", "it") or
             (idx >= 2 and tagged[idx - 2][1] == "Det" and tagged[idx - 1][1] == "N") or
-            t_lower in ("sleep", "sleeps", "run", "runs", "eat", "eats", "see", "sees", "want", "wants", "like", "likes", "love", "loves", "hate", "hates", "need", "needs", "know", "knows", "try", "tries", "call", "calls", "help", "helps", "bark", "barks", "barked", "stay", "stays", "stayed", "fail", "fails", "failed", "phone", "phones", "phoned", "use", "uses", "used", "pay", "pays", "paid", "forget", "forgets", "forgot")
+            (tagged[idx - 1][1] == "N" and idx == 1 and (full_lex.get(t_lower) == "V" or t_lower.endswith(("ed", "s")) or t_lower in ("came", "left", "lost", "won", "died", "flew", "fly", "felt", "held", "ran", "saw", "slept", "ate", "barked"))) or
+            t_lower in ("sleep", "sleeps", "run", "runs", "eat", "eats", "see", "sees", "want", "wants", "like", "likes", "love", "loves", "hate", "hates", "need", "needs", "know", "knows", "try", "tries", "call", "calls", "help", "helps", "bark", "barks", "barked", "stay", "stays", "stayed", "fail", "fails", "failed", "phone", "phones", "phoned", "use", "uses", "used", "pay", "pays", "paid", "forget", "forgets", "forgot", "came", "left", "lost", "won", "died", "flew", "fly", "felt", "held")
         ) and t_lower not in ("can", "could", "should", "would", "might", "may", "must", "will", "shall", "cannot", "doesnt", "dont", "isnt", "hasnt", "havent", "wont", "wouldnt", "shouldnt", "couldnt", "not") and t_lower not in COMMON_PREPOSITIONS and t_lower not in ("and", "or", "but", "so", "if", "that", "this", "my", "your", "his", "her", "their", "our", "the", "a", "an"):
             tagged.append((token, "V"))
             continue
@@ -400,11 +426,13 @@ def tag_tokens(tokens: List[str], lang: str = "en") -> List[Tuple[str, str]]:
             # Contextual: copula predicate adjective
             tagged.append((token, "Adj"))
         elif lang == "en" and idx == 0 and len(tokens) <= 4 and (
-            t_lower in ("run", "wait", "stop", "go", "come", "help", "call", "be", "listen", "look", "try", "eat", "jump", "leave", "quit", "peel", "tell", "open", "close", "give", "take", "stand", "sit", "drive", "get", "grab", "hurry", "humor", "hang", "hold", "keep", "let", "put", "wake", "stay", "pass", "shoot", "work", "pay", "phone", "refuse", "forget", "use", "fail") or
-            (len(tokens) > 1 and tokens[1].lower() in ("up", "down", "on", "off", "in", "out", "away", "back", "ahead", "me", "him", "her", "us", "them", "it"))
+            t_lower in ("run", "wait", "stop", "go", "come", "help", "call", "be", "listen", "look", "try", "eat", "jump", "leave", "quit", "peel", "tell", "open", "close", "give", "take", "stand", "sit", "drive", "get", "grab", "hurry", "humor", "hang", "hold", "keep", "let", "put", "wake", "stay", "pass", "shoot", "work", "pay", "phone", "refuse", "forget", "use", "fail", "feel", "warn", "marry", "catch", "ask", "touch", "watch", "drop", "wash") or
+            (len(tokens) > 1 and tokens[1].lower() in ("up", "down", "on", "off", "in", "out", "away", "back", "ahead", "me", "him", "her", "us", "them", "it", "this", "that"))
         ):
             # Contextual: sentence-initial subjectless imperative
             tagged.append((token, "V"))
+        elif lang == "en" and idx > 0 and tagged[idx - 1][1] == "V" and t_lower in ("that", "this", "some", "his") and (idx + 1 == len(tokens) or tokens[idx + 1] in (".", "!", "?")):
+            tagged.append((token, "N"))
         elif token in lex:
             tagged.append((token, lex[token]))
         elif token in full_lex and full_lex[token] in ("N", "V", "Adj", "Adv", "Det", "P", "Conj", "C"):
@@ -871,16 +899,23 @@ def parse(text: str, lang: Optional[str] = None) -> XBarNode:
         tagged_tokens = tag_tokens(corrected_tokens, lang)
         grammar_rules = FRENCH_GRAMMAR if lang == "fr" else GRAMMAR
         
-        # 1. Try parsing as a full sentence (IP)
+        # 1. Try parsing as a full sentence (IP or CP)
         parses, furthest_ip = _run_earley(tagged_tokens, "IP", grammar_rules)
         best_parse = None
         furthest_idx = furthest_ip
         
+        if not parses:
+            cp_parses, furthest_cp = _run_earley(tagged_tokens, "CP", grammar_rules)
+            if furthest_cp > furthest_idx:
+                furthest_idx = furthest_cp
+            if cp_parses:
+                parses = cp_parses
+
         if parses:
             best_parse = max(parses, key=score_tree)
         else:
-            # 2. Fallback to sub-phrases: NP, VP, PP
-            for fallback_cat in ("NP", "VP", "PP"):
+            # 2. Fallback to sub-phrases: NP, VP, PP, I'
+            for fallback_cat in ("NP", "VP", "PP", "I'"):
                 parses, furthest_fallback = _run_earley(tagged_tokens, fallback_cat, grammar_rules)
                 if furthest_fallback > furthest_idx:
                     furthest_idx = furthest_fallback

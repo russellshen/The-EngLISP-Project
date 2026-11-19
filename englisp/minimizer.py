@@ -48,7 +48,12 @@ ADJECTIVE_EXPANSIONS = {v: k for k, v in ADJECTIVE_CONTRACTIONS.items()}
 
 PRONOUNS_NO_DET = {
     "i", "you", "he", "she", "it", "we", "they", "me", "him", "her", "us", "them",
-    "je", "tu", "il", "elle", "on", "nous", "vous", "ils", "elles", "moi", "toi", "lui"
+    "je", "tu", "il", "elle", "on", "nous", "vous", "ils", "elles", "moi", "toi", "lui",
+    "what", "who", "which", "quoi", "qui", "que"
+}
+
+PROPER_NOUNS = {
+    "tom", "mary", "john", "bob", "alice", "sam", "paul", "jane", "peter", "jack"
 }
 
 POSSESSIVE_DETS = {
@@ -63,7 +68,8 @@ KNOWN_VERBS = {
     "stand", "sit", "quit", "leave", "fall", "arrive", "look", "listen", "read", "write",
     "tell", "say", "speak", "talk", "hear", "buy", "make", "take", "give", "find",
     "bake", "hide", "joke", "move", "check", "accept", "shoot", "ignore", "work",
-    "pay", "forget", "use", "fail", "phone", "refuse", "drive", "grab", "hurry", "stay"
+    "pay", "forget", "use", "fail", "phone", "refuse", "drive", "grab", "hurry", "stay",
+    "die", "fly", "lie", "cry", "ask", "hold", "warn", "marry", "catch", "bark"
 }
 
 def get_pos(word: Any) -> str:
@@ -356,7 +362,7 @@ def expand_sexpr(expr: SExpr, is_head: bool = False) -> SExpr:
                 return expr
             if expr_lower in POSSESSIVE_DETS:
                 return expr
-            if expr_lower in PRONOUNS_NO_DET:
+            if expr_lower in PRONOUNS_NO_DET or expr_lower in PROPER_NOUNS or expr_lower in ("this", "that", "ceci", "cela", "ça"):
                 return [expr]
             pos = get_pos(expr)
             if pos == "N":
