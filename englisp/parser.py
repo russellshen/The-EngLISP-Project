@@ -124,6 +124,15 @@ FRENCH_HAVE_VERBS = {
 def clean_and_tokenize(text: str) -> List[str]:
     """Cleans punctuation and splits string into tokens, separating French clitics and expanding contractions."""
     text = text.lower()
+    STANDARD_ENGLISH_CONTRACTIONS = {
+        "i'm": "i am", "he's": "he is", "she's": "she is", "it's": "it is",
+        "we're": "we are", "they're": "they are", "you're": "you are",
+        "i've": "i have", "we've": "we have", "they've": "they have", "you've": "you have",
+        "i'll": "i will", "he'll": "he will", "she'll": "she will", "we'll": "we will", "they'll": "they will", "you'll": "you will",
+        "i'd": "i would", "he'd": "he would", "she'd": "she would", "we'd": "we would", "they'd": "they would", "you'd": "you would",
+    }
+    for contraction, expansion in STANDARD_ENGLISH_CONTRACTIONS.items():
+        text = re.sub(r"\b" + re.escape(contraction) + r"\b", expansion, text)
     for contraction, expansion in ENGLISH_CONTRACTIONS.items():
         text = re.sub(r"\b" + re.escape(contraction) + r"\b", expansion, text)
     # Separate French clitics (l', d', qu', j', m', t', s', n')
@@ -161,6 +170,8 @@ def correct_word(word: str, lang: str = "en") -> str:
     if w_lower in PRONOUN_LEXICON:
         return word
     if w_lower in COMMON_PREPOSITIONS:
+        return word
+    if lang == "en" and w_lower in ("get", "got", "gets", "getting", "gotten", "do", "did", "does", "done", "doing", "go", "goes", "went", "gone", "going"):
         return word
     from englisp.loader import ENGLISH_VERB_FORMS, FRENCH_VERB_FORMS
     if lang == "en" and w_lower in ENGLISH_VERB_FORMS:
@@ -238,8 +249,18 @@ def tag_tokens(tokens: List[str], lang: str = "en") -> List[Tuple[str, str]]:
         if t_lower == "not":
             tagged.append((token, "Neg"))
             continue
-        if lang == "en" and t_lower in ("cannot", "doesnt", "dont", "isnt", "hasnt", "havent", "wont", "wouldnt", "shouldnt", "couldnt", "can", "could", "should", "would", "might", "may", "must", "will", "shall", "do", "does", "did") and (idx + 1 < len(tokens) or t_lower not in ("do", "does", "did")):
+        if lang == "en" and t_lower in ("cannot", "doesnt", "dont", "isnt", "hasnt", "havent", "wont", "wouldnt", "shouldnt", "couldnt", "can", "could", "should", "would", "might", "may", "must", "will", "shall"):
             tagged.append((token, "I"))
+            continue
+        if lang == "en" and t_lower in ("do", "does", "did"):
+            has_subsequent_verb_or_neg = any(
+                tok.lower() == "not" or tok.lower() in ("sleep", "sleeps", "run", "runs", "eat", "eats", "see", "sees", "want", "wants", "like", "likes", "love", "loves", "hate", "hates", "need", "needs", "know", "knows", "try", "tries", "call", "calls", "help", "helps", "go", "get", "come", "make", "take", "give") or (tok.lower() in lex and lex[tok.lower()] == "V")
+                for tok in tokens[idx+1:]
+            )
+            if has_subsequent_verb_or_neg:
+                tagged.append((token, "I"))
+            else:
+                tagged.append((token, "V"))
             continue
         if t_lower in ("exit", "exits"):
             tagged.append((token, "V"))
@@ -319,6 +340,22 @@ def tag_tokens(tokens: List[str], lang: str = "en") -> List[Tuple[str, str]]:
                     tagged.append((token, "N"))
                     continue
 
+        # Check for English subject pronoun followed by verb
+        if lang == "en" and idx > 0 and tagged[idx - 1][1] in ("N", "Det") and (
+            tokens[idx - 1].lower() in ("i", "you", "he", "she", "we", "they", "it") or
+            (idx >= 2 and tagged[idx - 2][1] == "Det" and tagged[idx - 1][1] == "N") or
+            t_lower in ("sleep", "sleeps", "run", "runs", "eat", "eats", "see", "sees", "want", "wants", "like", "likes", "love", "loves", "hate", "hates", "need", "needs", "know", "knows", "try", "tries", "call", "calls", "help", "helps", "bark", "barks", "barked", "stay", "stays", "stayed", "fail", "fails", "failed", "phone", "phones", "phoned", "use", "uses", "used", "pay", "pays", "paid", "forget", "forgets", "forgot")
+        ) and t_lower not in ("can", "could", "should", "would", "might", "may", "must", "will", "shall", "cannot", "doesnt", "dont", "isnt", "hasnt", "havent", "wont", "wouldnt", "shouldnt", "couldnt", "not") and t_lower not in COMMON_PREPOSITIONS and t_lower not in ("and", "or", "but", "so", "if", "that", "this", "my", "your", "his", "her", "their", "our", "the", "a", "an"):
+            tagged.append((token, "V"))
+            continue
+
+        # Check for English verbal particles / adverbs (only when not heading a prepositional phrase)
+        if lang == "en" and idx > 0 and tagged[idx - 1][1] == "V" and t_lower in ("up", "down", "on", "off", "in", "out", "away", "back", "ahead", "around", "over"):
+            is_followed_by_np = (idx + 1 < len(tokens) and tokens[idx + 1].lower() in ("the", "a", "an", "this", "that", "these", "those", "my", "your", "his", "her", "their", "our"))
+            if not is_followed_by_np:
+                tagged.append((token, "Adv"))
+                continue
+
         # Check for Synset ID pattern matches
         if re.match(r"^n\d+", token):
             tagged.append((token, "N"))
@@ -331,17 +368,13 @@ def tag_tokens(tokens: List[str], lang: str = "en") -> List[Tuple[str, str]]:
         elif lang == "en" and idx > 0 and tagged[idx - 1][1] in ("I", "Neg") and t_lower not in ("been", "be", "have", "had", "being", "not"):
             # Contextual: word after helper modal or negation is a Verb
             tagged.append((token, "V"))
-        elif lang == "en" and idx > 0 and tagged[idx - 1][1] in ("N", "Det") and (
-            tokens[idx - 1].lower() in ("i", "you", "he", "she", "we", "they", "it") or
-            (idx >= 2 and tagged[idx - 2][1] == "Det" and tagged[idx - 1][1] == "N") or
-            t_lower in ("sleep", "sleeps", "run", "runs", "eat", "eats", "see", "sees", "want", "wants", "like", "likes", "love", "loves", "hate", "hates", "need", "needs", "know", "knows", "try", "tries", "call", "calls", "help", "helps", "bark", "barks", "barked")
-        ) and t_lower not in ("can", "could", "should", "would", "might", "may", "must", "will", "shall", "cannot", "doesnt", "dont", "isnt", "hasnt", "havent", "wont", "wouldnt", "shouldnt", "couldnt") and t_lower not in COMMON_PREPOSITIONS and t_lower not in ("and", "or", "but", "so", "if", "that", "this", "my", "your", "his", "her", "their", "our", "the", "a", "an"):
-            # Contextual: token immediately following subject NP / pronoun functions as Verb head
-            tagged.append((token, "V"))
-        elif lang == "en" and idx > 0 and tagged[idx - 1][1] == "V" and tokens[idx - 1].lower() in ("am", "is", "are", "was", "were", "be", "been") and t_lower in ("sad", "calm", "happy", "ready", "fat", "tall", "short", "red", "blue", "green", "busy", "good", "bad", "sick", "old", "rich", "clean", "dirty", "hungry", "thirsty", "quiet", "nice", "afraid"):
+        elif lang == "en" and idx > 0 and tagged[idx - 1][1] == "V" and tokens[idx - 1].lower() in ("am", "is", "are", "was", "were", "be", "been") and t_lower in ("sad", "calm", "happy", "ready", "fat", "tall", "short", "red", "blue", "green", "busy", "good", "bad", "sick", "old", "rich", "clean", "dirty", "hungry", "thirsty", "quiet", "nice", "afraid", "wet", "bald", "free", "glad", "lazy", "safe", "sure", "thin", "tidy", "ugly", "cold", "deaf", "fast"):
             # Contextual: copula predicate adjective
             tagged.append((token, "Adj"))
-        elif lang == "en" and idx == 0 and len(tokens) <= 4 and t_lower in ("run", "wait", "stop", "go", "come", "help", "call", "be", "listen", "look", "try", "eat", "jump", "leave", "quit", "peel", "tell", "open", "close", "give", "take", "stand", "sit"):
+        elif lang == "en" and idx == 0 and len(tokens) <= 4 and (
+            t_lower in ("run", "wait", "stop", "go", "come", "help", "call", "be", "listen", "look", "try", "eat", "jump", "leave", "quit", "peel", "tell", "open", "close", "give", "take", "stand", "sit", "drive", "get", "grab", "hurry", "humor", "hang", "hold", "keep", "let", "put", "wake", "stay", "pass", "shoot", "work", "pay", "phone", "refuse", "forget", "use", "fail") or
+            (len(tokens) > 1 and tokens[1].lower() in ("up", "down", "on", "off", "in", "out", "away", "back", "ahead", "me", "him", "her", "us", "them", "it"))
+        ):
             # Contextual: sentence-initial subjectless imperative
             tagged.append((token, "V"))
         elif token in lex:
@@ -795,7 +828,7 @@ def parse(text: str, lang: Optional[str] = None) -> XBarNode:
                 spelling_corrections.append({"original": t, "corrected": corr})
             
             w_lower = corr.lower()
-            is_known = (w_lower in lex) or (w_lower in PRONOUN_LEXICON) or (w_lower in COMMON_PREPOSITIONS) or (lang == "fr" and (w_lower in COMMON_FRENCH_PREPOSITIONS or w_lower in FRENCH_COPULAS or w_lower in FRENCH_HAVE_VERBS)) or (w_lower == "_") or (w_lower.startswith("[") and w_lower.endswith("]")) or w_lower.isdigit()
+            is_known = (w_lower in lex) or (w_lower in PRONOUN_LEXICON) or (w_lower in COMMON_PREPOSITIONS) or (w_lower in ("get", "got", "gets", "getting", "do", "did", "does", "done", "go", "goes", "went", "gone")) or (lang == "fr" and (w_lower in COMMON_FRENCH_PREPOSITIONS or w_lower in FRENCH_COPULAS or w_lower in FRENCH_HAVE_VERBS)) or (w_lower == "_") or (w_lower.startswith("[") and w_lower.endswith("]")) or w_lower.isdigit()
             if not is_known:
                 for suffix in plural_suffixes:
                     if w_lower.endswith(suffix):

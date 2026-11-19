@@ -52,6 +52,10 @@ IRREGULAR_FRENCH_VERBS = {
     "courir": {"1sg": "cours", "2sg": "cours", "3sg": "court", "1pl": "courons", "2pl": "courez", "3pl": "courent", "imp": "courait", "fut": "courra", "cond": "courrait", "pp": "couru", "inf": "courir", "imp_pres": "cours"},
     "aider": {"1sg": "aide", "2sg": "aides", "3sg": "aide", "1pl": "aidons", "2pl": "aidez", "3pl": "aident", "imp": "aidait", "fut": "aidera", "cond": "aiderait", "pp": "aidé", "inf": "aider", "imp_pres": "aide"},
     "appeler": {"1sg": "appelle", "2sg": "appelles", "3sg": "appelle", "1pl": "appelons", "2pl": "appelez", "3pl": "appellent", "imp": "appelait", "fut": "appellera", "cond": "appellerait", "pp": "appelé", "inf": "appeler", "imp_pres": "appelle"},
+    "conduire": {"1sg": "conduis", "2sg": "conduis", "3sg": "conduit", "1pl": "conduisons", "2pl": "conduisez", "3pl": "conduisent", "imp": "conduisait", "fut": "conduira", "cond": "conduirait", "pp": "conduit", "inf": "conduire", "imp_pres": "conduis"},
+    "rester": {"1sg": "reste", "2sg": "restes", "3sg": "reste", "1pl": "restons", "2pl": "restez", "3pl": "restent", "imp": "restait", "fut": "restera", "cond": "resterait", "pp": "resté", "inf": "rester", "imp_pres": "reste"},
+    "payer": {"1sg": "paie", "2sg": "paies", "3sg": "paie", "1pl": "payons", "2pl": "payez", "3pl": "paient", "imp": "payait", "fut": "paierai", "cond": "paierait", "pp": "payé", "inf": "payer", "imp_pres": "paie"},
+    "attraper": {"1sg": "attrape", "2sg": "attrapes", "3sg": "attrape", "1pl": "attrapons", "2pl": "attrapez", "3pl": "attrapent", "imp": "attrapait", "fut": "attrapera", "cond": "attraperait", "pp": "attrapé", "inf": "attraper", "imp_pres": "attrape"},
 }
 
 def inflect_verb(base: str, form_type: str, lang: str) -> str:
@@ -416,6 +420,18 @@ VERBS_EN_TO_FR = {
     "quit": "arrêter", "quits": "arrête",
     "smoke": "fumer", "smokes": "fume", "smoked": "fumé",
     "peel": "éplucher", "peels": "épluche", "peeled": "épluché",
+    "drive": "conduire", "drives": "conduit", "drove": "conduit",
+    "grab": "attraper", "grabs": "attrape", "grabbed": "attrapé",
+    "hurry": "se dépêcher", "hurries": "se dépêche", "hurried": "dépêché",
+    "stay": "rester", "stays": "reste", "stayed": "resté",
+    "pay": "payer", "pays": "paie", "paid": "payé",
+    "forget": "oublier", "forgets": "oublie", "forgot": "oublié",
+    "use": "utiliser", "uses": "utilise", "used": "utilisé",
+    "fail": "échouer", "fails": "échoue", "failed": "échoué",
+    "phone": "téléphoner", "phones": "téléphone", "phoned": "téléphoné",
+    "refuse": "refuser", "refuses": "refuse", "refused": "refusé",
+    "do": "faire", "does": "fait", "did": "fait",
+    "get": "obtenir", "gets": "obtient", "got": "obtenu",
 }
 
 COMMON_WORDS_EN_TO_FR = {
@@ -444,6 +460,11 @@ COMMON_WORDS_EN_TO_FR = {
     "word": "mot", "words": "mots", "man": "homme", "men": "hommes",
     "son": "fils", "sons": "fils", "boy": "garçon", "boys": "garçons",
     "calm": "calme", "sad": "triste", "ready": "prêt", "happy": "heureux",
+    "wet": "mouillé", "fat": "gras", "bald": "chauve", "busy": "occupé",
+    "deaf": "sourd", "fast": "rapide", "free": "libre", "glad": "content",
+    "late": "en retard", "lazy": "paresseux", "safe": "en sécurité",
+    "sick": "malade", "sure": "certain", "tall": "grand", "thin": "mince",
+    "tidy": "ordonné", "ugly": "laid", "cold": "froid",
     "once": "une fois que"
 }
 
@@ -1539,7 +1560,7 @@ def sexpr_to_xbar(expr: SExpr, lang: str = "en") -> XBarNode:
             aux_list = []
             if lang == "fr":
                 op_low = op.lower()
-                is_past_form = op_low in ("fell", "left", "went", "came", "saw", "ate", "made", "bought", "won", "lost", "fixed", "tried", "met", "said", "promised", "slept") or op_low.endswith("ed")
+                is_past_form = op_low in ("fell", "left", "went", "came", "saw", "ate", "made", "bought", "won", "lost", "fixed", "tried", "met", "said", "promised", "slept", "did", "got") or op_low.endswith("ed")
                 if is_past_form:
                     is_unacc = op_low in ("fell", "left", "went", "came") or op_low in FRENCH_UNACCUSATIVES or verb_form.lower() in FRENCH_UNACCUSATIVES
                     if is_unacc:
@@ -1569,6 +1590,24 @@ def sexpr_to_xbar(expr: SExpr, lang: str = "en") -> XBarNode:
             for arg_expr in args:
                 arg_node = sexpr_to_xbar(arg_expr, lang)
                 vp_children.append(arg_node)
+            if lang == "fr":
+                IMPERATIVE_PRONOUNS = {
+                    "you": "toi", "him": "le", "her": "la", "it": "le", "them": "les", "us": "nous", "me": "moi",
+                    "vous": "vous", "te": "toi", "le": "le", "la": "la", "les": "les", "nous": "nous",
+                    "lui": "le", "elle": "la", "eux": "les", "moi": "moi", "toi": "toi", "leur": "les"
+                }
+                for child in vp_children[1:]:
+                    if child.category == "NP":
+                        has_det = any(c.category == "Det" for c in child.children)
+                        if has_det:
+                            continue
+                        for desc in child.children:
+                            if desc.category == "N'" and desc.children:
+                                for c in desc.children:
+                                    if c.category in ("N", "Pron") and c.label and c.label.lower() in IMPERATIVE_PRONOUNS:
+                                        c.label = IMPERATIVE_PRONOUNS[c.label.lower()]
+                            elif desc.category in ("N", "Pron") and desc.label and desc.label.lower() in IMPERATIVE_PRONOUNS:
+                                desc.label = IMPERATIVE_PRONOUNS[desc.label.lower()]
             first_np_idx = -1
             for i, child in enumerate(vp_children[1:], start=1):
                 if child.category == "NP":
@@ -1602,40 +1641,59 @@ def sexpr_to_xbar(expr: SExpr, lang: str = "en") -> XBarNode:
             arg_node = sexpr_to_xbar(arg_expr, lang)
             vp_children.append(arg_node)
 
-        # Check for French clitic object movement
+        # Check for French clitic object movement or imperative enclisis
         clitic_node = None
-        if lang == "fr" and subject_expr != "_":
+        if lang == "fr":
             FRENCH_PRONOUN_CLITICS = {
                 "you": "te", "him": "le", "her": "la", "it": "le", "them": "les", "us": "nous", "me": "me",
                 "vous": "vous", "te": "te", "le": "le", "la": "la", "les": "les", "nous": "nous",
-                "lui": "le", "elle": "la", "eux": "les", "moi": "me", "toi": "te", "leur": "les"
+                "lui": "le", "elle": "la", "eux": "les", "moi": "me", "toi": "te", "leur": "les", "il": "le"
             }
-            clitic_idx = -1
-            for i, child in enumerate(vp_children[1:], start=1):
-                if child.category == "NP":
-                    # An NP with a determiner (e.g. 'le livre') is a full noun phrase, not a clitic pronoun!
-                    has_det = any(c.category == "Det" for c in child.children)
-                    if has_det:
-                        continue
-                    head_noun = ""
-                    for desc in child.children:
-                        if desc.category == "N'" and desc.children:
-                            for c in desc.children:
+            IMPERATIVE_PRONOUNS = {
+                "you": "toi", "him": "le", "her": "la", "it": "le", "them": "les", "us": "nous", "me": "moi",
+                "vous": "vous", "te": "toi", "le": "le", "la": "la", "les": "les", "nous": "nous",
+                "lui": "le", "elle": "la", "eux": "les", "moi": "moi", "toi": "toi", "leur": "les"
+            }
+            if subject_expr != "_":
+                clitic_idx = -1
+                for i, child in enumerate(vp_children[1:], start=1):
+                    if child.category == "NP":
+                        has_det = any(c.category == "Det" for c in child.children)
+                        if has_det:
+                            continue
+                        head_noun = ""
+                        for desc in child.children:
+                            if desc.category == "N'" and desc.children:
+                                for c in desc.children:
+                                    if c.category in ("N", "Pron") and c.label:
+                                        head_noun = c.label.lower()
+                                        break
+                        if not head_noun and child.children:
+                            for c in child.children:
                                 if c.category in ("N", "Pron") and c.label:
                                     head_noun = c.label.lower()
                                     break
-                    if not head_noun and child.children:
-                        for c in child.children:
-                            if c.category in ("N", "Pron") and c.label:
-                                head_noun = c.label.lower()
-                                break
-                    if head_noun in FRENCH_PRONOUN_CLITICS:
-                        clitic_label = FRENCH_PRONOUN_CLITICS[head_noun]
-                        clitic_node = XBarNode(category="Clitic", role="adjunct", label=clitic_label)
-                        clitic_idx = i
-                        break
-            if clitic_idx != -1:
-                vp_children.pop(clitic_idx)
+                        if head_noun in FRENCH_PRONOUN_CLITICS:
+                            clitic_label = FRENCH_PRONOUN_CLITICS[head_noun]
+                            clitic_node = XBarNode(category="Clitic", role="adjunct", label=clitic_label)
+                            clitic_idx = i
+                            break
+                if clitic_idx != -1:
+                    vp_children.pop(clitic_idx)
+            else:
+                # In affirmative French imperatives, object pronouns stay in post-verbal position in enclitic form
+                for child in vp_children[1:]:
+                    if child.category == "NP":
+                        has_det = any(c.category == "Det" for c in child.children)
+                        if has_det:
+                            continue
+                        for desc in child.children:
+                            if desc.category == "N'" and desc.children:
+                                for c in desc.children:
+                                    if c.category in ("N", "Pron") and c.label and c.label.lower() in IMPERATIVE_PRONOUNS:
+                                        c.label = IMPERATIVE_PRONOUNS[c.label.lower()]
+                            elif desc.category in ("N", "Pron") and desc.label and desc.label.lower() in IMPERATIVE_PRONOUNS:
+                                desc.label = IMPERATIVE_PRONOUNS[desc.label.lower()]
 
         # Reconstruct V' bar
         first_np_idx = -1
